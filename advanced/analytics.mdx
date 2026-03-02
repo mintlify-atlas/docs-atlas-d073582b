@@ -1,0 +1,403 @@
+---
+title: 'Analytics & Telemetry'
+description: 'Understanding and configuring analytics in the Avail Nexus SDK'
+icon: 'chart-line'
+---
+
+## Overview
+
+The Nexus SDK includes **built-in analytics** powered by PostHog to help improve the SDK and understand usage patterns. Analytics are **enabled by default** (opt-out system) but can be easily customized or disabled.
+
+<Info>
+By default, the SDK sends anonymous telemetry data to Avail's PostHog instance. All data collection is covered by [Avail's Privacy Policy](https://www.availproject.org/privacy) and PostHog's GDPR-compliant Data Processing Agreement.
+</Info>
+
+## Data Collection
+
+### What is Collected
+
+By default, the SDK collects:
+
+- **Session metrics** — Duration, success rates, operation counts
+- **Operation performance** — Timing, errors, operation types
+- **Wallet type** — Provider information (e.g., MetaMask, Coinbase Wallet)
+- **Network/chain usage** — Which chains are being used
+- **Error tracking** — Error types and occurrences (without sensitive data)
+
+### What is NOT Collected
+
+The following data is **never** collected by default:
+
+- **Wallet addresses** — Unless you explicitly call `analytics.identify()`
+- **Transaction amounts** — Can be excluded via `privacy.anonymizeAmounts`
+- **Personal information** — No PII is collected
+
+<Warning>
+Operation metadata may include transaction context (e.g., recipient or contract addresses) in tracked events. Use privacy controls if this is a concern.
+</Warning>
+
+## Configuration
+
+### Disabling Analytics
+
+To completely disable analytics:
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({
+  network: 'mainnet',
+  analytics: { enabled: false },
+});
+```
+
+### Privacy Controls
+
+Control what data is sent:
+
+```typescript
+const sdk = new NexusSDK({
+  network: 'mainnet',
+  analytics: {
+    enabled: true,
+    privacy: {
+      anonymizeWallets: true,  // Hash wallet addresses with SHA-256
+      anonymizeAmounts: true,  // Exclude transaction amounts from events
+    },
+  },
+});
+```
+
+<ParamField path="privacy.anonymizeWallets" type="boolean" default="false">
+  When enabled, wallet addresses are hashed using SHA-256 before being sent to analytics. The SDK uses a session-specific salt for additional privacy.
+</ParamField>
+
+<ParamField path="privacy.anonymizeAmounts" type="boolean" default="false">
+  When enabled, sensitive financial fields like `valueUsd`, `totalValueUsd`, `gasUsed`, and `value` are removed from analytics events.
+</ParamField>
+
+### Custom PostHog Instance
+
+Use your own PostHog instance for analytics:
+
+```typescript
+const sdk = new NexusSDK({
+  network: 'mainnet',
+  analytics: {
+    enabled: true,
+    posthogApiKey: 'phc_YOUR_POSTHOG_KEY',
+    posthogApiHost: 'https://your-posthog-instance.com',
+    appMetadata: {
+      appName: 'My DApp',
+      appVersion: '1.0.0',
+      appUrl: 'https://mydapp.com',
+    },
+  },
+});
+```
+
+<ParamField path="posthogApiKey" type="string">
+  Your PostHog project API key. This is a write-only key that can only send events, not read or modify data.
+</ParamField>
+
+<ParamField path="posthogApiHost" type="string" default="https://us.i.posthog.com">
+  Your PostHog API host URL. Use this if you're self-hosting PostHog or using a different region.
+</ParamField>
+
+<ParamField path="appMetadata" type="object">
+  Optional metadata about your application that will be included in all events:
+  - `appName` — Your application name
+  - `appVersion` — Your application version
+  - `appUrl` — Your application URL
+</ParamField>
+
+### Session Recording
+
+Enable PostHog session recording (disabled by default):
+
+```typescript
+const sdk = new NexusSDK({
+  network: 'mainnet',
+  analytics: {
+    enabled: true,
+    sessionRecording: true,
+  },
+});
+```
+
+<Warning>
+Session recording captures user interactions on your site. Use the `.sensitive` CSS class on elements containing sensitive data to mask them from recordings.
+</Warning>
+
+### Debug Mode
+
+Enable debug logging for analytics:
+
+```typescript
+const sdk = new NexusSDK({
+  network: 'mainnet',
+  analytics: {
+    enabled: true,
+    debug: true, // Logs analytics events to console
+  },
+});
+```
+
+## Programmatic Access
+
+### Track Custom Events
+
+```typescript
+// Track a custom event
+sdk.analytics.track('user_action', {
+  action: 'clicked_banner',
+  campaign: 'summer_2024',
+});
+```
+
+### Identify Users
+
+```typescript
+// Identify a user by wallet address
+await sdk.analytics.identify(userAddress, {
+  plan: 'premium',
+  joinDate: '2024-01-01',
+});
+
+// With privacy enabled, addresses are automatically hashed
+const sdk = new NexusSDK({
+  analytics: {
+    privacy: { anonymizeWallets: true },
+  },
+});
+await sdk.analytics.identify(userAddress); // Sends hashed version
+```
+
+<Info>
+The SDK does **not** automatically call `analytics.identify()`. You must explicitly identify users if you want to track them across sessions.
+</Info>
+
+### Runtime Control
+
+```typescript
+// Disable analytics at runtime
+sdk.analytics.disable();
+
+// Re-enable analytics
+sdk.analytics.enable();
+
+// Check if analytics is enabled
+if (sdk.analytics.isEnabled()) {
+  console.log('Analytics is active');
+}
+
+// Reset user identification
+sdk.analytics.reset();
+```
+
+### Error Tracking
+
+```typescript
+// Track errors with context
+try {
+  await sdk.bridge(params);
+} catch (error) {
+  sdk.analytics.trackError('bridge', error, {
+    token: 'USDC',
+    toChainId: 137,
+  });
+  throw error;
+}
+```
+
+## Tracked Events
+
+The SDK automatically tracks the following event categories:
+
+### SDK Lifecycle
+
+- `nexus_sdk_initialized` — SDK initialization successful
+- `nexus_sdk_initialization_failed` — SDK initialization failed
+- `nexus_sdk_deinitialized` — SDK cleanup/deinitialization
+
+### Session Events
+
+- `nexus_session_started` — New session started
+- `nexus_session_ended` — Session ended (includes duration and success rate)
+
+### Wallet Events
+
+- `nexus_wallet_connected` — Wallet connected
+- `nexus_wallet_disconnected` — Wallet disconnected
+- `nexus_wallet_changed` — Active wallet account changed
+- `nexus_wallet_network_changed` — Network/chain changed in wallet
+
+### Operation Events
+
+- **Bridge:** `nexus_bridge_initiated`, `nexus_bridge_transaction_success`, `nexus_bridge_transaction_failed`
+- **Transfer:** `nexus_transfer_initiated`, `nexus_transfer_transaction_success`, `nexus_transfer_transaction_failed`
+- **Swap:** `nexus_swap_initiated`, `nexus_swap_transaction_success`, `nexus_swap_transaction_failed`
+- **Execute:** `nexus_execute_initiated`, `nexus_execute_transaction_success`, `nexus_execute_transaction_failed`
+- **Bridge & Execute:** `nexus_bridge_and_execute_initiated`, `nexus_bridge_and_execute_transaction_success`
+
+### Performance Events
+
+- `nexus_operation_performance` — Operation timing and success metrics
+
+### Error Events
+
+- `nexus_error_occurred` — General error tracking
+- `nexus_user_rejected` — User rejected transaction/approval
+
+## Event Properties
+
+All events include base properties:
+
+```typescript
+{
+  sdkVersion: '1.2.3',          // SDK version
+  sessionId: 'abc123...',       // Unique session ID
+  network: 'mainnet',           // Network environment
+  timestamp: '2024-03-02T...',  // ISO timestamp
+  appName: 'My DApp',           // Your app name (if configured)
+  appVersion: '1.0.0',          // Your app version (if configured)
+  appUrl: 'https://...',        // Your app URL (if configured)
+  environment: 'production'     // Browser environment detection
+}
+```
+
+Operation-specific events include additional properties:
+
+```typescript
+// Bridge events
+{
+  token: 'USDC',
+  toChainId: 137,
+  sourceChains: [1, 42161],
+  amount: '100.00',             // Excluded if anonymizeAmounts is true
+  fees: { total: '0.50' },
+  duration: 15234,              // Operation duration in ms
+}
+
+// Error events
+{
+  operation: 'bridge',
+  errorType: 'NexusError',
+  errorMessage: 'Insufficient balance',
+  errorCode: 'INSUFFICIENT_BALANCE',
+}
+```
+
+## Privacy & Security
+
+### Wallet Address Hashing
+
+When `anonymizeWallets` is enabled, the SDK uses SHA-256 hashing with a session-specific salt:
+
+1. Original address: `0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45`
+2. Hashed version: `anon_a3f8e9b2c1d4e5f6`
+
+The hash is consistent within a session but changes across sessions, preventing cross-session tracking while allowing same-session analysis.
+
+### Data Sanitization
+
+The SDK automatically:
+
+- **Validates properties** — Prevents prototype pollution attacks
+- **Sanitizes URLs** — Removes query parameters and sensitive data
+- **Filters sensitive fields** — Removes financial data when `anonymizeAmounts` is enabled
+
+### PostHog API Key Security
+
+The default PostHog API key in the SDK is **intentionally public** and **safe to commit**:
+
+- It's a write-only project API key (not a Personal API Key)
+- Cannot read or modify existing data
+- Can only send events to Avail's PostHog instance
+- PostHog project is configured to reject malicious data
+
+<Info>
+If you want to use your own PostHog instance, provide your own `posthogApiKey` in the configuration.
+</Info>
+
+## Best Practices
+
+### For Privacy-Conscious Applications
+
+```typescript
+const sdk = new NexusSDK({
+  analytics: {
+    enabled: true,
+    privacy: {
+      anonymizeWallets: true,
+      anonymizeAmounts: true,
+    },
+  },
+});
+
+// Don't identify users if privacy is a concern
+// sdk.analytics.identify(...) // Skip this
+```
+
+### For Enterprise Applications
+
+```typescript
+const sdk = new NexusSDK({
+  analytics: {
+    enabled: true,
+    posthogApiKey: process.env.POSTHOG_KEY,
+    posthogApiHost: 'https://analytics.mycompany.com',
+    appMetadata: {
+      appName: 'MyDApp',
+      appVersion: process.env.APP_VERSION,
+      appUrl: window.location.origin,
+    },
+  },
+});
+```
+
+### For Development
+
+```typescript
+const sdk = new NexusSDK({
+  analytics: {
+    enabled: process.env.NODE_ENV === 'production',
+    debug: process.env.NODE_ENV === 'development',
+  },
+});
+```
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Can I opt out of analytics?">
+    Yes, set `analytics: { enabled: false }` when initializing the SDK.
+  </Accordion>
+
+  <Accordion title="Are wallet addresses tracked?">
+    Not by default. The SDK only tracks wallet addresses if you explicitly call `sdk.analytics.identify()`. Even then, you can enable `anonymizeWallets` to hash addresses before sending.
+  </Accordion>
+
+  <Accordion title="Can I see what data is being sent?">
+    Yes, enable debug mode with `analytics: { debug: true }` to log all analytics events to the console.
+  </Accordion>
+
+  <Accordion title="Is the PostHog API key in the source code a security risk?">
+    No. It's a write-only project API key that can only send events, not read or modify data. This is standard practice for client-side analytics.
+  </Accordion>
+
+  <Accordion title="Can I use a different analytics provider?">
+    The SDK currently supports PostHog only. However, you can access the raw event data by providing your own PostHog instance and implementing custom event handlers.
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Privacy Policy" icon="shield-halved" href="https://www.availproject.org/privacy">
+    Review Avail's privacy policy and data handling practices
+  </Card>
+  <Card title="PostHog Documentation" icon="chart-simple" href="https://posthog.com/docs">
+    Learn more about PostHog features and capabilities
+  </Card>
+</CardGroup>

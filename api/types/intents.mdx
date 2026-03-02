@@ -1,0 +1,450 @@
+---
+title: 'Intent Types'
+description: 'Intent and hook data structures for user approvals'
+keywords: ['intents', 'hooks', 'approval', 'readable intent', 'swap intent']
+---
+
+Intent types represent operations that require user approval, including bridge intents, swap intents, and token allowances.
+
+## ReadableIntent
+
+Human-readable representation of a bridge intent, including source routing, destination details, and fee breakdown.
+
+### Top-level fields
+
+<ResponseField name="sources" type="object[]" required>
+  Selected source chains and amounts (funds that will be pulled)
+  <Expandable title="properties">
+    <ResponseField name="amount" type="string" required>
+      Amount from this source (human-readable)
+    </ResponseField>
+    <ResponseField name="amountRaw" type="bigint" required>
+      Amount in atomic units
+    </ResponseField>
+    <ResponseField name="chain" type="object" required>
+      Source chain information
+      <Expandable title="properties">
+        <ResponseField name="id" type="number">
+          Chain ID
+        </ResponseField>
+        <ResponseField name="name" type="string">
+          Chain name (e.g., "Ethereum", "Polygon")
+        </ResponseField>
+        <ResponseField name="logo" type="string">
+          Chain logo URL
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="token" type="object" required>
+      Token information
+      <Expandable title="properties">
+        <ResponseField name="decimals" type="number">
+          Token decimals
+        </ResponseField>
+        <ResponseField name="symbol" type="string">
+          Token symbol (e.g., "USDC", "ETH")
+        </ResponseField>
+        <ResponseField name="logo" type="string">
+          Token logo URL
+        </ResponseField>
+        <ResponseField name="contractAddress" type="Hex">
+          Token contract address
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="chainID" type="number" deprecated>
+      Use `chain.id` instead
+    </ResponseField>
+    <ResponseField name="chainName" type="string" deprecated>
+      Use `chain.name` instead
+    </ResponseField>
+    <ResponseField name="chainLogo" type="string | undefined" deprecated>
+      Use `chain.logo` instead
+    </ResponseField>
+    <ResponseField name="contractAddress" type="Hex" deprecated>
+      Use `token.contractAddress` instead
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="allSources" type="object[]" required>
+  All available source options before user selection. Same structure as `sources`
+</ResponseField>
+
+<ResponseField name="destination" type="object" required>
+  Destination chain and amount details
+  <Expandable title="properties">
+    <ResponseField name="amount" type="string" required>
+      Destination amount (human-readable)
+    </ResponseField>
+    <ResponseField name="chainID" type="number" required>
+      Destination chain ID
+    </ResponseField>
+    <ResponseField name="chainName" type="string" required>
+      Destination chain name
+    </ResponseField>
+    <ResponseField name="chainLogo" type="string | undefined">
+      Destination chain logo URL
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="fees" type="object" required>
+  Comprehensive fee breakdown
+  <Expandable title="properties">
+    <ResponseField name="caGas" type="string" required>
+      Chain abstraction gas fee
+    </ResponseField>
+    <ResponseField name="gasSupplied" type="string" required>
+      Gas supplied to destination chain
+    </ResponseField>
+    <ResponseField name="protocol" type="string" required>
+      Protocol fee
+    </ResponseField>
+    <ResponseField name="solver" type="string" required>
+      Solver fee
+    </ResponseField>
+    <ResponseField name="total" type="string" required>
+      Total fees (sum of all fee components)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="token" type="object" required>
+  Token being bridged
+  <Expandable title="properties">
+    <ResponseField name="decimals" type="number" required>
+      Token decimals
+    </ResponseField>
+    <ResponseField name="logo" type="string | undefined">
+      Token logo URL
+    </ResponseField>
+    <ResponseField name="name" type="string" required>
+      Token name (e.g., "USD Coin")
+    </ResponseField>
+    <ResponseField name="symbol" type="string" required>
+      Token symbol (e.g., "USDC")
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sourcesTotal" type="string" required>
+  Total amount from all sources combined (human-readable)
+</ResponseField>
+
+### Example usage
+
+<CodeGroup>
+
+```typescript Displaying intent
+sdk.setOnIntentHook(({ intent, allow, deny }) => {
+  console.log('Bridge Intent:');
+  console.log(`Token: ${intent.token.symbol}`);
+  console.log(`To: ${intent.destination.chainName}`);
+  console.log(`Amount: ${intent.destination.amount}`);
+  
+  console.log('\nSources:');
+  intent.sources.forEach((source) => {
+    console.log(`  ${source.chain.name}: ${source.amount} ${source.token.symbol}`);
+  });
+  
+  console.log('\nFees:');
+  console.log(`  Protocol: ${intent.fees.protocol}`);
+  console.log(`  Solver: ${intent.fees.solver}`);
+  console.log(`  CA Gas: ${intent.fees.caGas}`);
+  console.log(`  Total: ${intent.fees.total}`);
+  
+  if (userApproves) {
+    allow();
+  } else {
+    deny();
+  }
+});
+```
+
+```typescript Refreshing intent
+sdk.setOnIntentHook(async ({ intent, allow, refresh }) => {
+  // Display initial intent
+  displayIntent(intent);
+  
+  // User wants to use different source chains
+  const newIntent = await refresh([8453, 42161]);
+  displayIntent(newIntent);
+  
+  allow();
+});
+```
+
+</CodeGroup>
+
+---
+
+## SwapIntent
+
+Human-readable representation of a swap operation.
+
+<ResponseField name="sources" type="object[]" required>
+  Source tokens and amounts to swap
+  <Expandable title="properties">
+    <ResponseField name="amount" type="string" required>
+      Source amount (human-readable)
+    </ResponseField>
+    <ResponseField name="chain" type="object" required>
+      Source chain information
+      <Expandable title="properties">
+        <ResponseField name="id" type="number">
+          Chain ID
+        </ResponseField>
+        <ResponseField name="name" type="string">
+          Chain name
+        </ResponseField>
+        <ResponseField name="logo" type="string">
+          Chain logo URL
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="token" type="object" required>
+      Source token information
+      <Expandable title="properties">
+        <ResponseField name="contractAddress" type="Hex">
+          Token contract address
+        </ResponseField>
+        <ResponseField name="decimals" type="number">
+          Token decimals
+        </ResponseField>
+        <ResponseField name="symbol" type="string">
+          Token symbol
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="destination" type="object" required>
+  Destination token and amount details
+  <Expandable title="properties">
+    <ResponseField name="amount" type="string" required>
+      Output amount (human-readable)
+    </ResponseField>
+    <ResponseField name="chain" type="object" required>
+      Destination chain information (same structure as source chain)
+    </ResponseField>
+    <ResponseField name="token" type="object" required>
+      Output token information (same structure as source token)
+    </ResponseField>
+    <ResponseField name="gas" type="object" required>
+      Gas supplied for destination
+      <Expandable title="properties">
+        <ResponseField name="amount" type="string">
+          Gas amount (human-readable)
+        </ResponseField>
+        <ResponseField name="token" type="object">
+          Gas token information (same structure as source token)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example usage
+
+```typescript
+sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+  console.log('Swap Intent:');
+  
+  console.log('\nFrom:');
+  intent.sources.forEach((source) => {
+    console.log(`  ${source.chain.name}: ${source.amount} ${source.token.symbol}`);
+  });
+  
+  console.log('\nTo:');
+  const dest = intent.destination;
+  console.log(`  ${dest.chain.name}: ${dest.amount} ${dest.token.symbol}`);
+  console.log(`  Gas: ${dest.gas.amount} ${dest.gas.token.symbol}`);
+  
+  if (userApproves) {
+    allow();
+  } else {
+    deny();
+  }
+});
+```
+
+---
+
+## Hook data structures
+
+### OnIntentHookData
+
+Data passed to the intent hook for bridge operations.
+
+<ResponseField name="intent" type="ReadableIntent" required>
+  The intent awaiting user approval. See [ReadableIntent](#readableintent)
+</ResponseField>
+
+<ResponseField name="allow" type="() => void" required>
+  Function to approve the intent and proceed with the operation
+</ResponseField>
+
+<ResponseField name="deny" type="() => void" required>
+  Function to reject the intent. Throws `USER_DENIED_INTENT` error
+</ResponseField>
+
+<ResponseField name="refresh" type="(selectedSources?: number[]) => Promise<ReadableIntent>" required>
+  Function to refresh the intent, optionally with different source chains
+  
+  **Parameters:**
+  - `selectedSources` - Optional array of chain IDs to use as sources
+  
+  **Returns:** Updated `ReadableIntent` with new routing and fees
+</ResponseField>
+
+```typescript
+type OnIntentHook = (data: OnIntentHookData) => void;
+
+sdk.setOnIntentHook(({ intent, allow, deny, refresh }) => {
+  // Your approval UI logic
+});
+```
+
+### OnSwapIntentHookData
+
+Data passed to the swap intent hook.
+
+<ResponseField name="intent" type="SwapIntent" required>
+  The swap intent awaiting user approval. See [SwapIntent](#swapintent)
+</ResponseField>
+
+<ResponseField name="allow" type="() => void" required>
+  Function to approve the swap and proceed
+</ResponseField>
+
+<ResponseField name="deny" type="() => void" required>
+  Function to reject the swap. Throws `USER_DENIED_INTENT` error
+</ResponseField>
+
+<ResponseField name="refresh" type="() => Promise<SwapIntent>" required>
+  Function to refresh the swap quote with updated market rates
+</ResponseField>
+
+```typescript
+type OnSwapIntentHook = (data: OnSwapIntentHookData) => void;
+
+sdk.setOnSwapIntentHook(({ intent, allow, deny, refresh }) => {
+  // Your swap approval UI logic
+});
+```
+
+### OnAllowanceHookData
+
+Data passed to the allowance hook for token approvals.
+
+<ResponseField name="sources" type="AllowanceHookSources" required>
+  Array of tokens requiring approval
+  <Expandable title="properties">
+    <ResponseField name="allowance" type="object" required>
+      Current and required allowance amounts
+      <Expandable title="properties">
+        <ResponseField name="current" type="string">
+          Current allowance (human-readable)
+        </ResponseField>
+        <ResponseField name="currentRaw" type="bigint">
+          Current allowance (atomic units)
+        </ResponseField>
+        <ResponseField name="minimum" type="string">
+          Minimum required allowance (human-readable)
+        </ResponseField>
+        <ResponseField name="minimumRaw" type="bigint">
+          Minimum required allowance (atomic units)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="chain" type="object" required>
+      Chain information
+      <Expandable title="properties">
+        <ResponseField name="id" type="number">
+          Chain ID
+        </ResponseField>
+        <ResponseField name="name" type="string">
+          Chain name
+        </ResponseField>
+        <ResponseField name="logo" type="string">
+          Chain logo URL
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="token" type="object" required>
+      Token information
+      <Expandable title="properties">
+        <ResponseField name="contractAddress" type="Hex">
+          Token contract address
+        </ResponseField>
+        <ResponseField name="decimals" type="number">
+          Token decimals
+        </ResponseField>
+        <ResponseField name="logo" type="string">
+          Token logo URL
+        </ResponseField>
+        <ResponseField name="name" type="string">
+          Token name
+        </ResponseField>
+        <ResponseField name="symbol" type="string">
+          Token symbol
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="allow" type="(amounts: Array<'max' | 'min' | bigint | string>) => void" required>
+  Function to approve allowances. Pass an array with one value per source:
+  - `'max'` - Approve unlimited (type(uint256).max)
+  - `'min'` - Approve exact minimum required
+  - `bigint` or `string` - Approve specific amount
+</ResponseField>
+
+<ResponseField name="deny" type="() => void" required>
+  Function to reject the allowance request. Throws `USER_DENIED_ALLOWANCE` error
+</ResponseField>
+
+### Allowance examples
+
+<CodeGroup>
+
+```typescript Display allowance request
+sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+  console.log('Allowance Required:');
+  
+  sources.forEach((source) => {
+    console.log(`\n${source.chain.name}:`);
+    console.log(`  Token: ${source.token.symbol}`);
+    console.log(`  Current: ${source.allowance.current}`);
+    console.log(`  Required: ${source.allowance.minimum}`);
+  });
+  
+  if (userApproves) {
+    allow(['min']); // Approve minimum for all sources
+  } else {
+    deny();
+  }
+});
+```
+
+```typescript Different amounts per source
+sdk.setOnAllowanceHook(({ sources, allow }) => {
+  // First source: approve unlimited
+  // Second source: approve exact minimum
+  // Third source: approve custom amount
+  allow(['max', 'min', 1000000n]);
+});
+```
+
+```typescript All unlimited
+sdk.setOnAllowanceHook(({ sources, allow }) => {
+  // Approve unlimited for all sources (fewer approvals in future)
+  const amounts = sources.map(() => 'max');
+  allow(amounts);
+});
+```
+
+</CodeGroup>

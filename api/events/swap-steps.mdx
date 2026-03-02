@@ -1,0 +1,504 @@
+---
+title: 'Swap Steps'
+description: 'Track swap operation progress with detailed step events'
+---
+
+## Overview
+
+Swap operations emit detailed progress events through the `onEvent` callback. These events allow you to track cross-chain swaps, source and destination transactions, permits, and quote calculations in real-time.
+
+## Event Callback
+
+```typescript
+import { NEXUS_EVENTS, type SwapStepType } from '@avail-project/nexus-core';
+
+sdk.swapWithExactIn(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      const step: SwapStepType = event.args;
+      console.log('Swap step:', step.type);
+      console.log('Completed:', step.completed);
+    }
+  },
+});
+```
+
+## Event Type
+
+### `SWAP_STEP_COMPLETE`
+
+Emitted each time a swap step completes.
+
+<ParamField path="event.name" type="'SWAP_STEP_COMPLETE'">
+  Event name constant from `NEXUS_EVENTS.SWAP_STEP_COMPLETE`
+</ParamField>
+
+<ParamField path="event.args" type="SwapStepType">
+  The swap step that completed
+</ParamField>
+
+## Swap Step Structure
+
+```typescript
+type SwapStepType = {
+  type: string;           // Step type name
+  typeID: string;         // Unique identifier
+  completed: boolean;     // Completion status
+  chain?: {              // Chain information (if applicable)
+    id: number;
+    name: string;
+  };
+  symbol?: string;       // Token symbol (if applicable)
+  explorerURL?: string;  // Transaction explorer URL (if applicable)
+  data?: any;           // Additional step-specific data
+};
+```
+
+## Step Types Reference
+
+### Initialization Steps
+
+<ResponseField name="SWAP_START" type="SWAP_START">
+  Swap operation started.
+  
+  **Properties**:
+  - `completed: true`
+  
+  **When**: At the very beginning of a swap operation.
+</ResponseField>
+
+<ResponseField name="DETERMINING_SWAP" type="DETERMINING_SWAP">
+  Calculating optimal swap route and quote.
+  
+  **Properties**:
+  - `completed: boolean` - Initially false, true when route is determined
+  
+  **When**: While the SDK calculates the best swap route across chains.
+</ResponseField>
+
+### Permit Steps
+
+<ResponseField name="CREATE_PERMIT_EOA_TO_EPHEMERAL" type="CREATE_PERMIT_EOA_TO_EPHEMERAL_{chainId}_{symbol}">
+  Creating permit from user wallet to ephemeral wallet.
+  
+  **Properties**:
+  - `completed: boolean`
+  - `symbol: string` - Token symbol
+  - `chain: { id, name }` - Chain information
+  
+  **When**: When permit signature is needed to authorize ephemeral wallet.
+  
+  **Note**: `typeID` includes chain ID and token symbol.
+</ResponseField>
+
+<ResponseField name="CREATE_PERMIT_FOR_SOURCE_SWAP" type="CREATE_PERMIT_FOR_SOURCE_SWAP_{chainId}_{symbol}">
+  Creating permit for source chain swap.
+  
+  **Properties**:
+  - `completed: boolean`
+  - `symbol: string` - Token symbol
+  - `chain: { id, name }` - Chain information
+  
+  **When**: When permit signature is needed for swap on source chain.
+  
+  **Note**: `typeID` includes chain ID and token symbol.
+</ResponseField>
+
+### Source Chain Steps
+
+<ResponseField name="SOURCE_SWAP_BATCH_TX" type="SOURCE_SWAP_BATCH_TX">
+  Executing batched swap transactions on source chains.
+  
+  **Properties**:
+  - `completed: boolean`
+  
+  **When**: While batched source swaps are being executed.
+</ResponseField>
+
+<ResponseField name="SOURCE_SWAP_HASH" type="SOURCE_SWAP_HASH_{chainId}">
+  Source chain swap transaction hash received.
+  
+  **Properties**:
+  - `completed: true`
+  - `chain: { id, name }` - Source chain
+  - `explorerURL: string` - Transaction explorer link
+  
+  **When**: After source swap transaction is broadcast.
+  
+  **Note**: `typeID` includes chain ID.
+</ResponseField>
+
+### Bridge Steps
+
+<ResponseField name="BRIDGE_DEPOSIT" type="BRIDGE_DEPOSIT_{chainId}">
+  Bridge deposit transaction for cross-chain swap.
+  
+  **Properties**:
+  - `data.chain: { id, name }` - Source chain
+  - `data.hash: Hex` - Transaction hash
+  - `data.explorerURL: string` - Explorer link
+  
+  **When**: During cross-chain bridge deposit.
+  
+  **Note**: `typeID` includes chain ID.
+</ResponseField>
+
+<ResponseField name="RFF_ID" type="RFF_ID">
+  Request for Funds ID received.
+  
+  **Properties**:
+  - `completed: true`
+  - `data: number` - RFF ID
+  
+  **When**: After cross-chain request is created and assigned an ID.
+</ResponseField>
+
+### Destination Chain Steps
+
+<ResponseField name="DESTINATION_SWAP_BATCH_TX" type="DESTINATION_SWAP_BATCH_TX">
+  Executing batched swap on destination chain.
+  
+  **Properties**:
+  - `completed: boolean`
+  
+  **When**: While destination swap is executing.
+</ResponseField>
+
+<ResponseField name="DESTINATION_SWAP_HASH" type="DESTINATION_SWAP_HASH_{chainId}">
+  Destination chain swap transaction hash.
+  
+  **Properties**:
+  - `completed: true`
+  - `chain: { id, name }` - Destination chain
+  - `explorerURL: string` - Transaction explorer link
+  
+  **When**: After destination swap transaction is broadcast.
+  
+  **Note**: `typeID` includes chain ID.
+</ResponseField>
+
+### Completion Steps
+
+<ResponseField name="SWAP_COMPLETE" type="SWAP_COMPLETE">
+  Swap completed successfully.
+  
+  **Properties**:
+  - `completed: true`
+  
+  **When**: After entire swap operation finishes successfully.
+</ResponseField>
+
+<ResponseField name="SWAP_SKIPPED" type="SWAP_SKIPPED">
+  Swap skipped because sufficient balance already exists on destination chain.
+  
+  **Properties**:
+  - `completed: true`
+  - `data.destination` - Output information
+  - `data.input` - Input information
+  - `data.gas` - Gas estimation
+  
+  **When**: During `swapAndExecute` when user has enough balance on destination.
+  
+  **Data Structure**:
+  ```typescript
+  {
+    destination: {
+      amount: string;
+      chain: { id: number; name: string };
+      token: { contractAddress: Hex; decimals: number; symbol: string };
+    };
+    input: {
+      amount: string;
+      token: { contractAddress: Hex; decimals: number; symbol: string };
+    };
+    gas: {
+      required: string;
+      price: string;
+      estimatedFee: string;
+    };
+  }
+  ```
+</ResponseField>
+
+## Examples
+
+### Basic Swap Progress
+
+```typescript
+import { NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+const swapSteps: string[] = [];
+
+sdk.swapWithExactIn(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      swapSteps.push(event.args.type);
+      console.log(`Step ${swapSteps.length}: ${event.args.type}`);
+      
+      if (event.args.explorerURL) {
+        console.log('View transaction:', event.args.explorerURL);
+      }
+    }
+  },
+});
+```
+
+### React Swap Progress Component
+
+```typescript
+import { useState } from 'react';
+import { NEXUS_EVENTS, type SwapStepType } from '@avail-project/nexus-core';
+
+function SwapProgress() {
+  const [steps, setSteps] = useState<SwapStepType[]>([]);
+  const [currentStep, setCurrentStep] = useState<string>('');
+
+  const handleSwap = async () => {
+    await sdk.swapWithExactIn(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+          const step = event.args;
+          setSteps(prev => [...prev, step]);
+          setCurrentStep(step.type);
+        }
+      },
+    });
+  };
+
+  return (
+    <div className="swap-progress">
+      <h3>Swap Progress</h3>
+      <p className="current-step">Current: {currentStep}</p>
+      
+      <div className="steps-list">
+        {steps.map((step, index) => (
+          <div 
+            key={index}
+            className={`step ${step.completed ? 'completed' : 'in-progress'}`}
+          >
+            <span className="step-icon">{step.completed ? '✓' : '●'}</span>
+            <div className="step-details">
+              <span className="step-name">{step.type}</span>
+              {step.chain && (
+                <span className="step-chain">on {step.chain.name}</span>
+              )}
+              {step.symbol && (
+                <span className="step-token">{step.symbol}</span>
+              )}
+              {step.explorerURL && (
+                <a href={step.explorerURL} target="_blank" rel="noopener noreferrer">
+                  View TX
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### Tracking Transaction Hashes
+
+```typescript
+const transactionHashes: { chain: string; hash: string; url: string }[] = [];
+
+sdk.swapWithExactIn(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      const step = event.args;
+      
+      if (step.type === 'SOURCE_SWAP_HASH' || step.type === 'DESTINATION_SWAP_HASH') {
+        transactionHashes.push({
+          chain: step.chain?.name || 'Unknown',
+          hash: step.typeID,
+          url: step.explorerURL || '',
+        });
+        
+        console.log('Transaction hashes:', transactionHashes);
+      }
+    }
+  },
+});
+```
+
+### Handling Swap Skipped
+
+```typescript
+sdk.swapAndExecute(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      if (event.args.type === 'SWAP_SKIPPED') {
+        const data = event.args.data;
+        console.log('Swap skipped - sufficient balance exists');
+        console.log('Output:', data.destination.amount, data.destination.token.symbol);
+        console.log('Gas required:', data.gas.estimatedFee);
+      }
+    }
+  },
+});
+```
+
+### Multi-Chain Swap Tracking
+
+```typescript
+const chainActivity = new Map<number, string[]>();
+
+sdk.swapWithExactIn(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      const step = event.args;
+      
+      if (step.chain) {
+        const chainId = step.chain.id;
+        const activity = chainActivity.get(chainId) || [];
+        activity.push(step.type);
+        chainActivity.set(chainId, activity);
+        
+        console.log(`Activity on ${step.chain.name}:`, activity);
+      }
+    }
+  },
+});
+```
+
+### Progress Percentage
+
+```typescript
+const expectedSteps = [
+  'SWAP_START',
+  'DETERMINING_SWAP',
+  'SOURCE_SWAP_BATCH_TX',
+  'SOURCE_SWAP_HASH',
+  'DESTINATION_SWAP_BATCH_TX',
+  'DESTINATION_SWAP_HASH',
+  'SWAP_COMPLETE',
+];
+
+let completedCount = 0;
+
+sdk.swapWithExactIn(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      if (event.args.completed) {
+        completedCount++;
+        const progress = (completedCount / expectedSteps.length) * 100;
+        console.log(`Progress: ${progress.toFixed(0)}%`);
+      }
+    }
+  },
+});
+```
+
+### Detailed Step Logging
+
+```typescript
+sdk.swapWithExactIn(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      const step = event.args;
+      
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Step:', step.type);
+      console.log('Type ID:', step.typeID);
+      console.log('Completed:', step.completed);
+      
+      if (step.chain) {
+        console.log('Chain:', step.chain.name, `(${step.chain.id})`);
+      }
+      
+      if (step.symbol) {
+        console.log('Token:', step.symbol);
+      }
+      
+      if (step.explorerURL) {
+        console.log('Explorer:', step.explorerURL);
+      }
+      
+      if (step.data) {
+        console.log('Data:', JSON.stringify(step.data, null, 2));
+      }
+    }
+  },
+});
+```
+
+### Cross-Chain Swap Detection
+
+```typescript
+let isCrossChain = false;
+
+sdk.swapWithExactIn(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      const step = event.args;
+      
+      // Bridge deposit indicates cross-chain swap
+      if (step.type === 'BRIDGE_DEPOSIT') {
+        isCrossChain = true;
+        console.log('Cross-chain swap detected');
+        console.log('Bridge transaction:', step.data.explorerURL);
+      }
+      
+      if (step.type === 'RFF_ID') {
+        console.log('Request for Funds ID:', step.data);
+      }
+    }
+  },
+});
+```
+
+### Timing Analysis
+
+```typescript
+const stepTimes = new Map<string, { start: number; end?: number }>();
+
+sdk.swapWithExactIn(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      const step = event.args;
+      const now = Date.now();
+      
+      if (!step.completed) {
+        // Step started
+        stepTimes.set(step.typeID, { start: now });
+      } else {
+        // Step completed
+        const timing = stepTimes.get(step.typeID);
+        if (timing) {
+          timing.end = now;
+          const duration = now - timing.start;
+          console.log(`${step.type} took ${duration}ms`);
+        }
+      }
+    }
+  },
+});
+```
+
+## Best Practices
+
+1. **Track by typeID**: Use `typeID` for unique identification, especially for chain-specific steps.
+
+2. **Check completed flag**: Not all steps emit with `completed: true` initially.
+
+3. **Display explorer links**: Show `explorerURL` when available for transaction verification.
+
+4. **Handle SWAP_SKIPPED**: This indicates an optimization where swap was unnecessary.
+
+5. **Show chain context**: Display `step.chain` and `step.symbol` when present.
+
+6. **Cross-chain indicators**: Detect cross-chain swaps via `BRIDGE_DEPOSIT` and `RFF_ID` steps.
+
+7. **Progress estimation**: Swap operations have variable step counts depending on route.
+
+8. **Error handling**: Wrap event handlers in try-catch to prevent crashes.
+
+## Related Hooks
+
+- [Swap Intent Hook](/api/hooks/swap-intent-hook) - Approve swap operations
+
+## Related Events
+
+- [Bridge Steps](/api/events/bridge-steps) - Track bridge operation progress

@@ -1,0 +1,419 @@
+---
+title: 'Balance Operations'
+description: 'Fetch and manage token balances across chains'
+---
+
+## getBalancesForBridge
+
+Get user's token balances across all supported chains for bridge operations.
+
+```typescript
+await sdk.getBalancesForBridge(): Promise<UserAsset[]>
+```
+
+### Returns
+
+<ResponseField name="assets" type="UserAsset[]">
+  Array of user assets with balances across all chains
+  
+  <Expandable title="UserAsset properties">
+    <ResponseField name="symbol" type="string">
+      Token symbol (e.g., `"USDC"`, `"ETH"`)
+    </ResponseField>
+    
+    <ResponseField name="balance" type="string">
+      Total balance across all chains (human-readable)
+    </ResponseField>
+    
+    <ResponseField name="balanceInFiat" type="number">
+      Total USD value of all balances
+    </ResponseField>
+    
+    <ResponseField name="decimals" type="number">
+      Token decimals
+    </ResponseField>
+    
+    <ResponseField name="icon" type="string" optional>
+      Token icon URL
+    </ResponseField>
+    
+    <ResponseField name="breakdown" type="AssetBreakdown[]">
+      Per-chain balance breakdown
+      
+      <Expandable title="AssetBreakdown properties">
+        <ResponseField name="balance" type="string">
+          Balance on this chain (human-readable)
+        </ResponseField>
+        
+        <ResponseField name="balanceInFiat" type="number">
+          USD value on this chain
+        </ResponseField>
+        
+        <ResponseField name="chain" type="object">
+          Chain information
+          
+          <Expandable title="properties">
+            <ResponseField name="id" type="number">
+              Chain ID
+            </ResponseField>
+            <ResponseField name="name" type="string">
+              Chain name
+            </ResponseField>
+            <ResponseField name="logo" type="string">
+              Chain logo URL
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+        
+        <ResponseField name="contractAddress" type="Hex">
+          Token contract address (0x... for native tokens)
+        </ResponseField>
+        
+        <ResponseField name="decimals" type="number">
+          Token decimals on this chain
+        </ResponseField>
+        
+        <ResponseField name="symbol" type="string">
+          Token symbol on this chain
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Basic Usage
+const assets = await sdk.getBalancesForBridge();
+
+console.log(`Found ${assets.length} tokens`);
+
+assets.forEach(asset => {
+  console.log(`${asset.symbol}: ${asset.balance} ($${asset.balanceInFiat})`);
+  
+  asset.breakdown.forEach(chain => {
+    console.log(`  - ${chain.chain.name}: ${chain.balance}`);
+  });
+});
+```
+
+```typescript Display in UI
+const assets = await sdk.getBalancesForBridge();
+
+// Filter tokens with non-zero balance
+const nonZeroAssets = assets.filter(asset => 
+  parseFloat(asset.balance) > 0
+);
+
+// Sort by USD value
+const sortedAssets = nonZeroAssets.sort((a, b) => 
+  b.balanceInFiat - a.balanceInFiat
+);
+
+// Display top 5 assets
+sortedAssets.slice(0, 5).forEach(asset => {
+  console.log(`${asset.symbol}: $${asset.balanceInFiat.toFixed(2)}`);
+});
+```
+
+```typescript Find Specific Token
+const assets = await sdk.getBalancesForBridge();
+
+const usdc = assets.find(asset => asset.symbol === 'USDC');
+
+if (usdc) {
+  console.log(`Total USDC: ${usdc.balance}`);
+  console.log('Available on:');
+  
+  usdc.breakdown.forEach(chain => {
+    console.log(`  ${chain.chain.name}: ${chain.balance} USDC`);
+  });
+}
+```
+</CodeGroup>
+
+### Response Example
+
+```json
+[
+  {
+    "symbol": "USDC",
+    "balance": "1250.50",
+    "balanceInFiat": 1250.50,
+    "decimals": 6,
+    "icon": "https://...",
+    "breakdown": [
+      {
+        "balance": "500.00",
+        "balanceInFiat": 500.00,
+        "chain": {
+          "id": 1,
+          "name": "Ethereum",
+          "logo": "https://..."
+        },
+        "contractAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "decimals": 6,
+        "symbol": "USDC"
+      },
+      {
+        "balance": "750.50",
+        "balanceInFiat": 750.50,
+        "chain": {
+          "id": 137,
+          "name": "Polygon",
+          "logo": "https://..."
+        },
+        "contractAddress": "0x3c499c3f21b113b72d1ce615b5b297a8c7c5a6e8",
+        "decimals": 6,
+        "symbol": "USDC"
+      }
+    ]
+  },
+  {
+    "symbol": "ETH",
+    "balance": "2.5",
+    "balanceInFiat": 8750.00,
+    "decimals": 18,
+    "icon": "https://...",
+    "breakdown": [
+      {
+        "balance": "1.5",
+        "balanceInFiat": 5250.00,
+        "chain": {
+          "id": 1,
+          "name": "Ethereum",
+          "logo": "https://..."
+        },
+        "contractAddress": "0x0000000000000000000000000000000000000000",
+        "decimals": 18,
+        "symbol": "ETH"
+      },
+      {
+        "balance": "1.0",
+        "balanceInFiat": 3500.00,
+        "chain": {
+          "id": 42161,
+          "name": "Arbitrum One",
+          "logo": "https://..."
+        },
+        "contractAddress": "0x0000000000000000000000000000000000000000",
+        "decimals": 18,
+        "symbol": "ETH"
+      }
+    ]
+  }
+]
+```
+
+---
+
+## getBalancesForSwap
+
+Get user's token balances for swap operations. Optionally filter to only native tokens and stablecoins.
+
+```typescript
+await sdk.getBalancesForSwap(onlyNativesAndStables?: boolean): Promise<UserAsset[]>
+```
+
+<ParamField path="onlyNativesAndStables" type="boolean" default="false">
+  If `true`, returns only native tokens (ETH, MATIC, etc.) and stablecoins (USDC, USDT)
+</ParamField>
+
+### Returns
+
+<ResponseField name="assets" type="UserAsset[]">
+  Array of user assets (same structure as `getBalancesForBridge`)
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript All Tokens
+// Get all swap-supported tokens
+const allBalances = await sdk.getBalancesForSwap();
+
+console.log(`Found ${allBalances.length} swap-supported tokens`);
+```
+
+```typescript Natives and Stables Only
+// Get only native tokens and stablecoins
+const stableBalances = await sdk.getBalancesForSwap(true);
+
+console.log('Native and stable tokens:');
+stableBalances.forEach(asset => {
+  console.log(`${asset.symbol}: ${asset.balance}`);
+});
+```
+
+```typescript Find Swappable Assets
+const assets = await sdk.getBalancesForSwap();
+
+// Find assets with balance on specific chain
+const arbitrumAssets = assets.filter(asset =>
+  asset.breakdown.some(chain => chain.chain.id === 42161)
+);
+
+console.log('Assets available on Arbitrum:');
+arbitrumAssets.forEach(asset => {
+  const arbitrumBalance = asset.breakdown.find(
+    chain => chain.chain.id === 42161
+  );
+  console.log(`${asset.symbol}: ${arbitrumBalance?.balance}`);
+});
+```
+</CodeGroup>
+
+### Use Cases
+
+<AccordionGroup>
+  <Accordion title="Building a Swap UI">
+    ```typescript
+    // Get balances for source token selection
+    const assets = await sdk.getBalancesForSwap();
+    
+    // Filter to tokens with non-zero balance
+    const availableTokens = assets.filter(asset => 
+      parseFloat(asset.balance) > 0
+    );
+    
+    // Display in dropdown
+    const tokenOptions = availableTokens.map(asset => ({
+      label: `${asset.symbol} (${asset.balance})`,
+      value: asset.symbol,
+      icon: asset.icon,
+    }));
+    ```
+  </Accordion>
+  
+  <Accordion title="Checking Sufficient Balance">
+    ```typescript
+    async function canSwap(
+      fromToken: string,
+      fromChain: number,
+      amount: bigint
+    ): Promise<boolean> {
+      const assets = await sdk.getBalancesForSwap();
+      
+      const asset = assets.find(a => a.symbol === fromToken);
+      if (!asset) return false;
+      
+      const chainBalance = asset.breakdown.find(
+        b => b.chain.id === fromChain
+      );
+      if (!chainBalance) return false;
+      
+      // Convert balance to bigint for comparison
+      const balanceRaw = sdk.utils.parseUnits(
+        chainBalance.balance,
+        chainBalance.decimals
+      );
+      
+      return balanceRaw >= amount;
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Balance Polling
+
+For real-time balance updates, implement polling:
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+class BalanceManager {
+  private sdk: NexusSDK;
+  private pollInterval: NodeJS.Timeout | null = null;
+  private subscribers: ((assets: UserAsset[]) => void)[] = [];
+  
+  constructor(sdk: NexusSDK) {
+    this.sdk = sdk;
+  }
+  
+  subscribe(callback: (assets: UserAsset[]) => void) {
+    this.subscribers.push(callback);
+  }
+  
+  async startPolling(intervalMs: number = 10000) {
+    // Initial fetch
+    await this.refresh();
+    
+    // Poll for updates
+    this.pollInterval = setInterval(async () => {
+      await this.refresh();
+    }, intervalMs);
+  }
+  
+  stopPolling() {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+  }
+  
+  private async refresh() {
+    try {
+      const assets = await this.sdk.getBalancesForBridge();
+      this.subscribers.forEach(callback => callback(assets));
+    } catch (error) {
+      console.error('Failed to refresh balances:', error);
+    }
+  }
+}
+
+// Usage
+const balanceManager = new BalanceManager(sdk);
+
+balanceManager.subscribe(assets => {
+  console.log('Balances updated:', assets);
+  updateUI(assets);
+});
+
+// Start polling every 10 seconds
+await balanceManager.startPolling(10000);
+
+// Stop polling when done
+balanceManager.stopPolling();
+```
+
+---
+
+## Error Handling
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  const assets = await sdk.getBalancesForBridge();
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.SDK_NOT_INITIALIZED:
+        console.error('SDK not initialized');
+        break;
+      case ERROR_CODES.WALLET_NOT_CONNECTED:
+        console.error('Wallet not connected');
+        break;
+      case ERROR_CODES.NO_BALANCE_FOR_ADDRESS:
+        console.log('No balances found for this address');
+        break;
+      default:
+        console.error('Failed to fetch balances:', error.message);
+    }
+  }
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Bridge Operations" icon="bridge" href="/api/bridge-operations">
+    Use balances for bridge operations
+  </Card>
+  <Card title="Swap Operations" icon="arrow-right-arrow-left" href="/api/swap-operations">
+    Use balances for swap operations
+  </Card>
+</CardGroup>

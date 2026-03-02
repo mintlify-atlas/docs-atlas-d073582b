@@ -1,0 +1,246 @@
+---
+title: 'Basic Bridge'
+description: 'Learn how to bridge tokens across chains with the Avail Nexus SDK'
+icon: 'bridge'
+---
+
+This guide demonstrates how to bridge tokens from one chain to another using the Nexus SDK. You'll learn how to initialize the SDK, set up hooks, and execute a basic bridge operation.
+
+## Overview
+
+Bridging tokens with the Nexus SDK involves:
+
+1. Initializing the SDK with a wallet provider
+2. Setting up intent and allowance hooks for user approvals
+3. Fetching balances and simulating the bridge
+4. Executing the bridge with event tracking
+
+## Browser Example
+
+<Steps>
+  <Step title="Initialize the SDK">
+    First, connect to the user's wallet and initialize the Nexus SDK:
+
+    ```typescript
+    import { NexusSDK, type EthereumProvider } from '@avail-project/nexus-core';
+
+    async function getWallet(): Promise<EthereumProvider> {
+      const provider = (window as any).ethereum;
+      if (provider == undefined) {
+        throw new Error('No wallet provider available. Install MetaMask or another wallet.');
+      }
+      return provider;
+    }
+
+    async function initializeNexus(provider: EthereumProvider): Promise<NexusSDK> {
+      const sdk = new NexusSDK({ network: 'testnet' });
+      await sdk.initialize(provider);
+      return sdk;
+    }
+
+    // Usage
+    const provider = await getWallet();
+    const sdk = await initializeNexus(provider);
+    ```
+
+    <Note>
+      Start with `testnet` for safe experimentation. Switch to `mainnet` only when ready for production.
+    </Note>
+  </Step>
+
+  <Step title="Set up hooks">
+    Configure hooks to handle user approvals for intents and token allowances:
+
+    ```typescript
+    // Intent hook - shows bridge details to user for approval
+    sdk.setOnIntentHook(({ intent, allow, deny }) => {
+      // Display intent details to user
+      console.log('Source chains:', intent.sources);
+      console.log('Destination:', intent.destination);
+      console.log('Fees:', intent.fees);
+      console.log('Total from sources:', intent.sourcesTotal);
+
+      // User approves or denies
+      if (userConfirmsIntent(intent)) {
+        allow();
+      } else {
+        deny();
+      }
+    });
+
+    // Allowance hook - handles token approvals
+    sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+      sources.forEach((source) => {
+        console.log(`Chain: ${source.chain.name}`);
+        console.log(`Token: ${source.token.symbol}`);
+        console.log(`Required: ${source.allowance.minimum}`);
+      });
+
+      if (userConfirmsAllowance()) {
+        allow(['min']); // Approve exact minimum needed
+      } else {
+        deny();
+      }
+    });
+    ```
+  </Step>
+
+  <Step title="Fetch balances and simulate">
+    Before executing the bridge, check balances and simulate the operation:
+
+    ```typescript
+    import { SUPPORTED_CHAINS, type BridgeParams } from '@avail-project/nexus-core';
+
+    const bridgeParams: BridgeParams = {
+      token: 'USDC',
+      amount: 1_000_000n, // 1 USDC (6 decimals)
+      recipient: '0x198866cD002F9e5E2b49DE96d68EaE9d32aD0000',
+      toChainId: SUPPORTED_CHAINS.ARBITRUM_SEPOLIA,
+    };
+
+    // Fetch balances across all chains
+    const balances = await sdk.getBalancesForBridge();
+    console.log('Available balances:', balances);
+
+    // Simulate the bridge to preview fees and sources
+    const simulation = await sdk.simulateBridge(bridgeParams);
+    console.log('Simulation result:', simulation.intent);
+    console.log('Total fees:', simulation.intent.fees.total);
+
+    // Calculate maximum bridgeable amount
+    const maxBridge = await sdk.calculateMaxForBridge(bridgeParams);
+    console.log(`Max amount: ${maxBridge.amount} ${maxBridge.symbol}`);
+    ```
+  </Step>
+
+  <Step title="Execute the bridge">
+    Execute the bridge operation with event tracking:
+
+    ```typescript
+    import { NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+    const result = await sdk.bridge(bridgeParams, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+          console.log('Bridge steps:', event.args);
+          // Initialize progress UI with all steps
+        }
+
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          console.log('Step completed:', event.args);
+          // Update progress UI
+        }
+      },
+    });
+
+    console.log('Bridge complete!');
+    console.log('Explorer URL:', result.explorerUrl);
+    console.log('Source transactions:', result.sourceTxs);
+    ```
+  </Step>
+</Steps>
+
+## Node.js Example
+
+For backend or CLI applications:
+
+```typescript
+import { BridgeParams, NEXUS_EVENTS, NexusSDK } from '@avail-project/nexus-core';
+import { ethers } from 'ethers';
+
+async function bridge(params: BridgeParams): Promise<boolean> {
+  // Initialize with private key wallet
+  const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!);
+  const sdk = new NexusSDK({ network: 'testnet' });
+  await sdk.initialize(wallet);
+
+  // Set hooks to auto-approve (use with caution!)
+  sdk.setOnIntentHook(({ allow }) => allow());
+  sdk.setOnAllowanceHook(({ allow }) => allow(['min']));
+
+  try {
+    const result = await sdk.bridge(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          console.log('Step completed:', event.args.type);
+        }
+      },
+    });
+
+    console.log('Bridge successful:', result.explorerUrl);
+    return true;
+  } catch (error) {
+    console.error('Bridge failed:', error);
+    return false;
+  }
+}
+
+// Execute
+await bridge({
+  token: 'USDC',
+  amount: 1_000_000n,
+  toChainId: 421614, // Arbitrum Sepolia
+});
+```
+
+<Warning>
+  Never commit private keys. Use environment variables or secure key management systems.
+</Warning>
+
+## Bridge Parameters
+
+All available parameters for the `bridge()` method:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `token` | `string` | Yes | Token symbol: `'ETH'`, `'USDC'`, `'USDT'`, `'USDM'` |
+| `amount` | `bigint` | Yes | Amount in smallest unit (e.g., 6 decimals for USDC) |
+| `toChainId` | `number` | Yes | Destination chain ID |
+| `recipient` | `Hex` | No | Recipient address (defaults to connected wallet) |
+| `sourceChains` | `number[]` | No | Specific source chains to use (auto-selected if omitted) |
+| `gas` | `bigint` | No | Gas amount to supply on destination chain |
+
+## Error Handling
+
+Handle common errors gracefully:
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.bridge(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.INSUFFICIENT_BALANCE:
+        console.error('Not enough tokens for this bridge operation');
+        break;
+      case ERROR_CODES.USER_DENIED_INTENT:
+        console.log('User cancelled the operation');
+        break;
+      case ERROR_CODES.TRANSACTION_TIMEOUT:
+        console.error('Transaction timed out. Check explorer.');
+        break;
+      default:
+        console.error('Bridge error:', error.message);
+    }
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Swap Exact In" icon="arrow-right-arrow-left" href="/examples/swap-exact-in">
+    Learn how to swap tokens with exact input amounts
+  </Card>
+  <Card title="Bridge and Execute" icon="code" href="/examples/bridge-and-execute">
+    Bridge tokens and execute smart contracts
+  </Card>
+  <Card title="Progress UI" icon="spinner" href="/examples/progress-ui">
+    Build progress indicators with step tracking
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/bridge-operations">
+    View complete bridge API documentation
+  </Card>
+</CardGroup>

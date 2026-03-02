@@ -1,0 +1,487 @@
+---
+title: 'Formatting Utilities'
+description: 'Format token balances and convert between units'
+icon: 'calculator'
+---
+
+## Overview
+
+The Nexus SDK provides powerful formatting utilities for displaying token balances and converting between different unit representations.
+
+## formatTokenBalance
+
+Format a token balance for UI display with smart zero-compression for tiny values.
+
+<CodeGroup>
+```typescript Basic Usage
+import { formatTokenBalance } from '@avail-project/nexus-core';
+
+// Format regular values
+const formatted = formatTokenBalance(1234567n, { decimals: 6, symbol: 'USDC' });
+// "1.2346 USDC"
+
+// Format tiny values with subscript notation
+const tiny = formatTokenBalance(85090000000n, { decimals: 18 });
+// "~0.0₄8509" (shows 4 leading zeros after decimal)
+```
+
+```typescript With Options
+import { formatTokenBalance } from '@avail-project/nexus-core';
+
+const balance = formatTokenBalance(1234567890n, {
+  decimals: 6,
+  symbol: 'USDC',
+  maxFractionDigits: 2,
+  thousandSeparator: true,
+  trimTrailingZeros: true,
+});
+// "1,234.57 USDC"
+```
+
+```typescript From String or Number
+import { formatTokenBalance } from '@avail-project/nexus-core';
+
+// Format from string
+const fromString = formatTokenBalance('1.234567', { symbol: 'ETH' });
+// "1.2346 ETH"
+
+// Format from number
+const fromNumber = formatTokenBalance(0.00008509, { symbol: 'ETH' });
+// "~0.0₄8509 ETH"
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="value" type="string | number | bigint" required>
+  The value to format. Can be:
+  - `bigint`: Raw token amount (requires `decimals` option)
+  - `string`: Human-readable decimal string
+  - `number`: JavaScript number
+</ParamField>
+
+<ParamField path="options" type="FormatTokenBalanceOptions">
+  Formatting options
+
+  <ParamField path="decimals" type="number">
+    Number of decimals (required when value is `bigint`)
+  </ParamField>
+
+  <ParamField path="symbol" type="string">
+    Token symbol to append (e.g., "USDC", "ETH")
+  </ParamField>
+
+  <ParamField path="significantDigits" type="number" default={4}>
+    Significant digits to show for tiny values
+  </ParamField>
+
+  <ParamField path="maxFractionDigits" type="number" default={4}>
+    Maximum decimal places for normal values
+  </ParamField>
+
+  <ParamField path="tinyThresholdPower" type="number" default={-4}>
+    Threshold exponent for tiny value detection (10^-4 = 0.0001)
+  </ParamField>
+
+  <ParamField path="zeroCompress" type="boolean" default={true}>
+    Use subscript notation for leading zeros (e.g., 0.0₄8509)
+  </ParamField>
+
+  <ParamField path="thousandSeparator" type="boolean" default={false}>
+    Add thousand separators (e.g., 12,345.67)
+  </ParamField>
+
+  <ParamField path="trimTrailingZeros" type="boolean" default={true}>
+    Remove trailing zeros after decimal point
+  </ParamField>
+
+  <ParamField path="approxTilde" type="boolean" default={true}>
+    Prefix "~" when rounding/truncating values
+  </ParamField>
+</ParamField>
+
+### Returns
+
+<ResponseField name="formatted" type="string">
+  The formatted balance string, ready for UI display
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+```typescript Regular Values
+import { formatTokenBalance } from '@avail-project/nexus-core';
+
+// Standard formatting
+formatTokenBalance(1234567n, { decimals: 6, symbol: 'USDC' });
+// "1.2346 USDC"
+
+formatTokenBalance('1234.5678', { symbol: 'ETH' });
+// "1234.5678 ETH"
+```
+
+```typescript Tiny Values
+import { formatTokenBalance } from '@avail-project/nexus-core';
+
+// Zero-compressed notation
+formatTokenBalance(85090000000n, { decimals: 18, symbol: 'ETH' });
+// "~0.0₄8509 ETH" (4 leading zeros)
+
+formatTokenBalance('0.000000000000000123', { symbol: 'ETH' });
+// "~0.0₁₅123 ETH" (15 leading zeros)
+```
+
+```typescript Custom Formatting
+import { formatTokenBalance } from '@avail-project/nexus-core';
+
+// With thousand separators
+formatTokenBalance(1234567890n, {
+  decimals: 6,
+  symbol: 'USDC',
+  thousandSeparator: true,
+});
+// "1,234.5679 USDC"
+
+// Without zero compression
+formatTokenBalance('0.00008509', {
+  symbol: 'ETH',
+  zeroCompress: false,
+});
+// "~0.00008509 ETH"
+```
+</CodeGroup>
+
+---
+
+## formatTokenBalanceParts
+
+Format a token balance and return structured parts for custom rendering.
+
+```typescript
+import { formatTokenBalanceParts } from '@avail-project/nexus-core';
+
+const parts = formatTokenBalanceParts(85090000000n, {
+  decimals: 18,
+  symbol: 'ETH',
+});
+
+// Returns:
+// {
+//   text: "~0.0₄8509 ETH",
+//   approx: true,
+//   integer: "0",
+//   zeroCount: 4,
+//   zeroSubscript: "₄",
+//   significant: "8509",
+//   symbol: "ETH"
+// }
+```
+
+### Parameters
+
+Same as `formatTokenBalance()`.
+
+### Returns
+
+<ResponseField name="parts" type="FormattedParts">
+  <ParamField path="text" type="string">
+    The complete formatted string
+  </ParamField>
+
+  <ParamField path="approx" type="boolean">
+    Whether the value is approximate (rounded/truncated)
+  </ParamField>
+
+  <ParamField path="integer" type="string">
+    The integer part of the number
+  </ParamField>
+
+  <ParamField path="fraction" type="string">
+    The fractional part (for normal values)
+  </ParamField>
+
+  <ParamField path="zeroCount" type="number">
+    Number of leading zeros after decimal (for tiny values)
+  </ParamField>
+
+  <ParamField path="zeroSubscript" type="string">
+    Subscript representation of zero count (e.g., "₄")
+  </ParamField>
+
+  <ParamField path="significant" type="string">
+    Significant digits after leading zeros (for tiny values)
+  </ParamField>
+
+  <ParamField path="symbol" type="string">
+    Token symbol if provided
+  </ParamField>
+</ResponseField>
+
+### Use Cases
+
+<CodeGroup>
+```typescript Custom Styling
+import { formatTokenBalanceParts } from '@avail-project/nexus-core';
+
+const parts = formatTokenBalanceParts('0.00008509', { symbol: 'ETH' });
+
+if (parts.zeroSubscript) {
+  // Render with custom subscript styling
+  return (
+    <span>
+      {parts.approx && '~'}
+      {parts.integer}.0
+      <sub>{parts.zeroCount}</sub>
+      {parts.significant} {parts.symbol}
+    </span>
+  );
+}
+```
+
+```typescript Conditional Display
+import { formatTokenBalanceParts } from '@avail-project/nexus-core';
+
+const parts = formatTokenBalanceParts(balance, { decimals: 18 });
+
+if (parts.approx) {
+  console.warn('Value is approximate');
+}
+
+if (parts.zeroCount && parts.zeroCount > 10) {
+  console.log('Extremely small value detected');
+}
+```
+</CodeGroup>
+
+---
+
+## parseUnits
+
+Convert a human-readable decimal string to the smallest unit (wei, satoshi, etc.).
+
+```typescript
+import { parseUnits } from '@avail-project/nexus-core';
+
+// Parse ETH to wei
+const wei = parseUnits('1.5', 18);
+// 1500000000000000000n
+
+// Parse USDC to base units
+const usdcAmount = parseUnits('100.50', 6);
+// 100500000n
+```
+
+### Parameters
+
+<ParamField path="value" type="string" required>
+  The human-readable decimal value (e.g., "1.5", "100.50")
+</ParamField>
+
+<ParamField path="decimals" type="number" required>
+  Number of decimal places for the token
+  - ETH: 18
+  - USDC/USDT: 6
+  - USDM: 18
+</ParamField>
+
+### Returns
+
+<ResponseField name="amount" type="bigint">
+  The value in the smallest unit (base units)
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+```typescript ETH to Wei
+import { parseUnits } from '@avail-project/nexus-core';
+
+const amount = parseUnits('1.5', 18);
+// 1500000000000000000n (1.5 ETH in wei)
+
+const small = parseUnits('0.001', 18);
+// 1000000000000000n (0.001 ETH in wei)
+```
+
+```typescript USDC to Base Units
+import { parseUnits } from '@avail-project/nexus-core';
+
+const usdc = parseUnits('100.50', 6);
+// 100500000n (100.50 USDC)
+
+const smallUsdc = parseUnits('0.01', 6);
+// 10000n (0.01 USDC)
+```
+
+```typescript Bridge Integration
+import { parseUnits } from '@avail-project/nexus-core';
+
+// User inputs "50.75 USDC"
+const userInput = '50.75';
+const amount = parseUnits(userInput, 6);
+
+await sdk.bridge({
+  token: 'USDC',
+  amount, // 50750000n
+  toChainId: 137,
+});
+```
+</CodeGroup>
+
+---
+
+## formatUnits
+
+Convert from the smallest unit to a human-readable decimal string.
+
+```typescript
+import { formatUnits } from '@avail-project/nexus-core';
+
+// Convert wei to ETH
+const eth = formatUnits(1500000000000000000n, 18);
+// "1.5"
+
+// Convert USDC base units to decimal
+const usdc = formatUnits(100500000n, 6);
+// "100.5"
+```
+
+### Parameters
+
+<ParamField path="value" type="bigint" required>
+  The value in smallest units (wei, satoshi, etc.)
+</ParamField>
+
+<ParamField path="decimals" type="number" required>
+  Number of decimal places for the token
+</ParamField>
+
+### Returns
+
+<ResponseField name="formatted" type="string">
+  Human-readable decimal string
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+```typescript Wei to ETH
+import { formatUnits } from '@avail-project/nexus-core';
+
+const eth = formatUnits(1500000000000000000n, 18);
+// "1.5"
+
+const smallEth = formatUnits(1000000000000000n, 18);
+// "0.001"
+```
+
+```typescript Display Balance
+import { formatUnits } from '@avail-project/nexus-core';
+
+const balances = await sdk.getBalancesForBridge();
+const usdc = balances.find(b => b.symbol === 'USDC');
+
+if (usdc?.breakdown[0]) {
+  const chainBalance = usdc.breakdown[0];
+  const formatted = formatUnits(
+    BigInt(chainBalance.balance),
+    chainBalance.decimals
+  );
+  console.log(`Balance: ${formatted} ${chainBalance.symbol}`);
+}
+```
+
+```typescript Round-trip Conversion
+import { parseUnits, formatUnits } from '@avail-project/nexus-core';
+
+// Convert to base units and back
+const original = '1.5';
+const baseUnits = parseUnits(original, 18);
+const formatted = formatUnits(baseUnits, 18);
+console.log(formatted); // "1.5"
+```
+</CodeGroup>
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use formatTokenBalance for UI" icon="display">
+    Always use `formatTokenBalance()` for displaying values to users. It handles edge cases like tiny values automatically.
+  </Card>
+
+  <Card title="Use parseUnits for API calls" icon="code">
+    Convert user input with `parseUnits()` before passing to SDK methods like `bridge()` or `swap()`.
+  </Card>
+
+  <Card title="Match decimals to token" icon="coins">
+    Always use the correct decimals for each token:
+    - ETH: 18
+    - USDC/USDT: 6
+    - USDM: 18
+  </Card>
+
+  <Card title="Handle bigint properly" icon="hashtag">
+    Remember that `parseUnits()` returns `bigint`. Use the `n` suffix for literals: `1000000n`
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+<CodeGroup>
+```typescript Input Validation
+import { parseUnits, formatUnits } from '@avail-project/nexus-core';
+
+function validateAndParse(input: string, decimals: number) {
+  try {
+    const amount = parseUnits(input, decimals);
+    if (amount <= 0n) {
+      throw new Error('Amount must be greater than 0');
+    }
+    return amount;
+  } catch (error) {
+    throw new Error('Invalid amount format');
+  }
+}
+```
+
+```typescript Balance Display
+import { formatTokenBalance } from '@avail-project/nexus-core';
+
+function displayBalance(balance: bigint, decimals: number, symbol: string) {
+  return formatTokenBalance(balance, {
+    decimals,
+    symbol,
+    thousandSeparator: true,
+    maxFractionDigits: 4,
+  });
+}
+
+// Usage
+const display = displayBalance(1234567890n, 6, 'USDC');
+// "1,234.5679 USDC"
+```
+
+```typescript Form Integration
+import { parseUnits, formatTokenBalance } from '@avail-project/nexus-core';
+
+// When user submits form
+const handleSubmit = async (formData: { amount: string }) => {
+  const amountInBaseUnits = parseUnits(formData.amount, 6);
+  
+  const result = await sdk.bridge({
+    token: 'USDC',
+    amount: amountInBaseUnits,
+    toChainId: 137,
+  });
+  
+  // Display confirmation
+  const formatted = formatTokenBalance(amountInBaseUnits, {
+    decimals: 6,
+    symbol: 'USDC',
+  });
+  console.log(`Bridged ${formatted}`);
+};
+```
+</CodeGroup>

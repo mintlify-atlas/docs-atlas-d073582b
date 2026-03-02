@@ -1,0 +1,306 @@
+---
+title: 'Intent Hook'
+description: 'Review and approve bridge/transfer intents before execution'
+---
+
+## Overview
+
+The Intent Hook is called when the SDK needs user approval for a bridge or transfer intent. This hook allows users to review source chains, destination details, fees, and amounts before approving or denying the operation.
+
+<Info>
+The Intent Hook is **required** for all bridge, transfer, and bridge-and-execute operations. Without setting this hook, these operations will fail.
+</Info>
+
+## Hook Signature
+
+```typescript
+type OnIntentHook = (data: OnIntentHookData) => void;
+
+type OnIntentHookData = {
+  allow: () => void;
+  deny: () => void;
+  intent: ReadableIntent;
+  refresh: (selectedSources?: number[]) => Promise<ReadableIntent>;
+};
+```
+
+## Setting the Hook
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Display intent details to user
+  console.log('Source chains:', intent.sources);
+  console.log('Destination:', intent.destination);
+  console.log('Fees:', intent.fees);
+  console.log('Total from sources:', intent.sourcesTotal);
+
+  // User approves
+  if (userApproves) {
+    allow();
+  } else {
+    deny(); // Throws USER_DENIED_INTENT error
+  }
+});
+```
+
+## Parameters
+
+### `allow()`
+
+Approve the intent and proceed with the operation.
+
+<ParamField path="allow" type="() => void" required>
+  Callback function to approve the intent. Call this when the user confirms they want to proceed.
+</ParamField>
+
+### `deny()`
+
+Reject the intent and cancel the operation.
+
+<ParamField path="deny" type="() => void" required>
+  Callback function to reject the intent. Throws a `USER_DENIED_INTENT` error when called.
+</ParamField>
+
+### `intent`
+
+The intent details for user review.
+
+<ParamField path="intent" type="ReadableIntent" required>
+  Complete intent information including sources, destination, fees, and token details.
+</ParamField>
+
+### `refresh()`
+
+Refresh the intent with different source chains or updated quotes.
+
+<ParamField path="refresh" type="(selectedSources?: number[]) => Promise<ReadableIntent>" required>
+  Optional function to refresh the intent. Pass an array of chain IDs to use specific source chains.
+</ParamField>
+
+## ReadableIntent Structure
+
+<ResponseField name="sources" type="array" required>
+  Array of source chains from which funds will be pulled.
+  
+  <Expandable title="Source properties">
+    <ResponseField name="amount" type="string">
+      Human-readable amount (e.g., "100.50")
+    </ResponseField>
+    <ResponseField name="amountRaw" type="bigint">
+      Raw amount in smallest unit
+    </ResponseField>
+    <ResponseField name="chain" type="object">
+      <Expandable title="Chain properties">
+        <ResponseField name="id" type="number">Chain ID</ResponseField>
+        <ResponseField name="name" type="string">Chain name (e.g., "Ethereum")</ResponseField>
+        <ResponseField name="logo" type="string">Chain logo URL</ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="token" type="object">
+      <Expandable title="Token properties">
+        <ResponseField name="decimals" type="number">Token decimals</ResponseField>
+        <ResponseField name="symbol" type="string">Token symbol (e.g., "USDC")</ResponseField>
+        <ResponseField name="logo" type="string">Token logo URL</ResponseField>
+        <ResponseField name="contractAddress" type="Hex">Token contract address</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="allSources" type="array" required>
+  All available source chains before selection (same structure as `sources`).
+</ResponseField>
+
+<ResponseField name="destination" type="object" required>
+  Destination chain details.
+  
+  <Expandable title="Destination properties">
+    <ResponseField name="amount" type="string">Amount to receive</ResponseField>
+    <ResponseField name="chainID" type="number">Destination chain ID</ResponseField>
+    <ResponseField name="chainName" type="string">Destination chain name</ResponseField>
+    <ResponseField name="chainLogo" type="string | undefined">Chain logo URL</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="fees" type="object" required>
+  Complete fee breakdown.
+  
+  <Expandable title="Fee properties">
+    <ResponseField name="caGas" type="string">Chain abstraction gas fee</ResponseField>
+    <ResponseField name="gasSupplied" type="string">Gas supplied to destination</ResponseField>
+    <ResponseField name="protocol" type="string">Protocol fee</ResponseField>
+    <ResponseField name="solver" type="string">Solver fee</ResponseField>
+    <ResponseField name="total" type="string">Total fees (sum of all fees)</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="token" type="object" required>
+  Token being bridged.
+  
+  <Expandable title="Token properties">
+    <ResponseField name="decimals" type="number">Token decimals</ResponseField>
+    <ResponseField name="logo" type="string | undefined">Token logo URL</ResponseField>
+    <ResponseField name="name" type="string">Token name</ResponseField>
+    <ResponseField name="symbol" type="string">Token symbol</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sourcesTotal" type="string" required>
+  Total amount from all sources combined (human-readable).
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+sdk.setOnIntentHook(({ intent, allow, deny }) => {
+  // Show confirmation dialog
+  const confirmed = window.confirm(
+    `Bridge ${intent.sourcesTotal} ${intent.token.symbol} to ${intent.destination.chainName}?\n` +
+    `Total fees: ${intent.fees.total} ${intent.token.symbol}`
+  );
+
+  if (confirmed) {
+    allow();
+  } else {
+    deny();
+  }
+});
+```
+
+### With UI Framework (React)
+
+```typescript
+import { useState } from 'react';
+import { NexusSDK, type ReadableIntent } from '@avail-project/nexus-core';
+
+function BridgeComponent() {
+  const [intent, setIntent] = useState<ReadableIntent | null>(null);
+  const [callbacks, setCallbacks] = useState<{ allow: () => void; deny: () => void } | null>(null);
+
+  const sdk = new NexusSDK({ network: 'mainnet' });
+
+  sdk.setOnIntentHook(({ intent, allow, deny }) => {
+    setIntent(intent);
+    setCallbacks({ allow, deny });
+  });
+
+  return (
+    <div>
+      {intent && (
+        <div className="intent-review">
+          <h3>Review Bridge Intent</h3>
+          
+          <div className="sources">
+            <h4>From:</h4>
+            {intent.sources.map((source, i) => (
+              <div key={i}>
+                {source.amount} {source.token.symbol} on {source.chain.name}
+              </div>
+            ))}
+            <p>Total: {intent.sourcesTotal} {intent.token.symbol}</p>
+          </div>
+
+          <div className="destination">
+            <h4>To:</h4>
+            <p>{intent.destination.amount} {intent.token.symbol} on {intent.destination.chainName}</p>
+          </div>
+
+          <div className="fees">
+            <h4>Fees:</h4>
+            <p>Protocol: {intent.fees.protocol}</p>
+            <p>Solver: {intent.fees.solver}</p>
+            <p>Gas: {intent.fees.caGas}</p>
+            <p><strong>Total: {intent.fees.total} {intent.token.symbol}</strong></p>
+          </div>
+
+          <button onClick={() => callbacks?.allow()}>Approve</button>
+          <button onClick={() => callbacks?.deny()}>Reject</button>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### Refreshing with Different Source Chains
+
+```typescript
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  console.log('Initial sources:', intent.sources);
+
+  // User wants to use different chains
+  if (userWantsDifferentChains) {
+    const refreshedIntent = await refresh([8453, 42161]); // Base and Arbitrum only
+    console.log('Refreshed sources:', refreshedIntent.sources);
+    console.log('New fees:', refreshedIntent.fees);
+  }
+
+  allow();
+});
+```
+
+### Displaying All Available Sources
+
+```typescript
+sdk.setOnIntentHook(({ intent, allow, deny }) => {
+  console.log('Selected sources:', intent.sources.length);
+  console.log('All available sources:', intent.allSources.length);
+
+  // Show which chains have funds
+  intent.allSources.forEach(source => {
+    const isSelected = intent.sources.some(s => s.chain.id === source.chain.id);
+    console.log(
+      `${source.chain.name}: ${source.amount} ${source.token.symbol} ${isSelected ? '(selected)' : ''}`
+    );
+  });
+
+  allow();
+});
+```
+
+## Error Handling
+
+<Warning>
+Calling `deny()` throws a `NexusError` with code `USER_DENIED_INTENT`. This is expected behavior and should not be treated as an error in your UI.
+</Warning>
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.bridge(params);
+} catch (error) {
+  if (error instanceof NexusError && error.code === ERROR_CODES.USER_DENIED_INTENT) {
+    // User cancelled - not an error to display
+    console.log('User cancelled the bridge operation');
+  } else {
+    // Actual error
+    console.error('Bridge failed:', error);
+  }
+}
+```
+
+## Best Practices
+
+1. **Always display fees**: Users should know the total cost before approving.
+
+2. **Show source breakdown**: When bridging from multiple chains, clearly show which chains are being used.
+
+3. **Highlight totals**: Display `sourcesTotal` and `fees.total` prominently.
+
+4. **Use refresh judiciously**: Only call `refresh()` when the user explicitly wants to change source chains.
+
+5. **Handle denials gracefully**: Don't show error messages when users cancel via `deny()`.
+
+6. **Async operations**: The hook can be async if you need to perform asynchronous UI operations before calling `allow()` or `deny()`.
+
+## Related Hooks
+
+- [Allowance Hook](/api/hooks/allowance-hook) - Approve token allowances
+- [Swap Intent Hook](/api/hooks/swap-intent-hook) - Approve swap operations

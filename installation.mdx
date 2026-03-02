@@ -1,0 +1,262 @@
+---
+title: Installation
+description: Install and set up the Avail Nexus SDK in your project
+---
+
+## Package Installation
+
+Install the Nexus SDK using your preferred package manager:
+
+<CodeGroup>
+
+```bash npm
+npm install @avail-project/nexus-core
+```
+
+```bash yarn
+yarn add @avail-project/nexus-core
+```
+
+```bash pnpm
+pnpm add @avail-project/nexus-core
+```
+
+</CodeGroup>
+
+## Prerequisites
+
+Before installing, ensure your environment meets these requirements:
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    Version **18.0.0** or higher
+  </Card>
+  <Card title="Package Manager" icon="box">
+    npm **9.0.0** or equivalent yarn/pnpm
+  </Card>
+</CardGroup>
+
+### Verify Your Environment
+
+Check your Node.js and npm versions:
+
+```bash
+node --version
+# Should output v18.0.0 or higher
+
+npm --version
+# Should output 9.0.0 or higher
+```
+
+<Warning>
+The SDK requires Node.js 18+ due to its use of modern JavaScript features and cryptographic APIs. Using an older version may result in runtime errors.
+</Warning>
+
+## TypeScript Configuration
+
+While the SDK works with JavaScript, we **strongly recommend using TypeScript** for the best developer experience. The SDK includes comprehensive TypeScript definitions.
+
+### Recommended tsconfig.json Settings
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM"],
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  }
+}
+```
+
+## Import the SDK
+
+Once installed, you can import the SDK components you need:
+
+### ESM (ES Modules)
+
+```typescript
+import { NexusSDK, NEXUS_EVENTS } from '@avail-project/nexus-core';
+```
+
+### CommonJS
+
+```javascript
+const { NexusSDK, NEXUS_EVENTS } = require('@avail-project/nexus-core');
+```
+
+<Tip>
+The SDK is fully tree-shakeable, so bundlers like Webpack, Rollup, or Vite will only include the code you actually use.
+</Tip>
+
+## Available Exports
+
+The SDK exports a wide range of utilities, types, and constants:
+
+### Core Classes
+
+```typescript
+import {
+  NexusSDK,           // Main SDK class
+  NexusError,         // Error class
+  AnalyticsManager,   // Analytics manager
+} from '@avail-project/nexus-core';
+```
+
+### Type Definitions
+
+```typescript
+import type {
+  // Operation Parameters
+  BridgeParams,
+  TransferParams,
+  ExecuteParams,
+  BridgeAndExecuteParams,
+  ExactInSwapInput,
+  ExactOutSwapInput,
+  
+  // Results
+  BridgeResult,
+  TransferResult,
+  ExecuteResult,
+  SwapResult,
+  
+  // Hooks
+  OnIntentHook,
+  OnAllowanceHook,
+  OnSwapIntentHook,
+  
+  // Balance Types
+  UserAsset,
+  AssetBreakdown,
+  
+  // Metadata
+  ChainMetadata,
+  TokenMetadata,
+} from '@avail-project/nexus-core';
+```
+
+### Constants and Events
+
+```typescript
+import {
+  NEXUS_EVENTS,           // Event name constants
+  SUPPORTED_CHAINS,       // Supported chain IDs
+  CHAIN_METADATA,         // Chain information
+  TOKEN_METADATA,         // Token information
+  ERROR_CODES,            // Error code constants
+  BRIDGE_STEPS,           // Bridge step types
+  SWAP_STEPS,             // Swap step types
+} from '@avail-project/nexus-core';
+```
+
+### Utility Functions
+
+```typescript
+import {
+  formatTokenBalance,     // Format token amounts for display
+  formatUnits,            // Convert from wei to decimal
+  parseUnits,             // Convert from decimal to wei
+  isValidAddress,         // Validate Ethereum addresses
+  truncateAddress,        // Shorten addresses for display
+  getSupportedChains,     // Get supported chain list
+  getCoinbaseRates,       // Get current token prices
+} from '@avail-project/nexus-core';
+```
+
+## Browser Environment
+
+The SDK works seamlessly in browser environments with bundlers like:
+
+- **Vite**
+- **Webpack 5+**
+- **Rollup**
+- **esbuild**
+- **Parcel**
+
+### Polyfills
+
+The SDK includes necessary polyfills automatically. No additional configuration is required for most modern bundlers.
+
+<Note>
+If you're using an older bundler or encounter issues with Node.js built-ins like `buffer`, you may need to configure polyfills manually.
+</Note>
+
+## Node.js Environment
+
+The SDK works out of the box in Node.js environments:
+
+```typescript node-example.ts
+import { NexusSDK } from '@avail-project/nexus-core';
+import { ethers } from 'ethers';
+
+const wallet = new ethers.Wallet(privateKey);
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(wallet);
+```
+
+<Tip>
+For Node.js usage, you'll need a wallet provider. Popular options include **ethers.js**, **viem**, or custom implementations of the EIP-1193 standard.
+</Tip>
+
+## Verification
+
+Verify your installation by creating a simple test file:
+
+```typescript test-install.ts
+import { NexusSDK, SUPPORTED_CHAINS } from '@avail-project/nexus-core';
+
+console.log('SDK imported successfully!');
+console.log('Supported chains:', Object.keys(SUPPORTED_CHAINS));
+
+const sdk = new NexusSDK({ network: 'testnet' });
+console.log('SDK instance created:', sdk.isInitialized());
+```
+
+Run it:
+
+```bash
+npx tsx test-install.ts
+# or
+node --loader ts-node/esm test-install.ts
+```
+
+You should see output confirming the SDK is properly installed.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start Guide"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Build your first bridge transaction
+  </Card>
+  <Card
+    title="Configuration"
+    icon="gear"
+    href="/concepts/initialization"
+  >
+    Learn about SDK configuration options
+  </Card>
+</CardGroup>
+
+---
+
+<Warning>
+**Troubleshooting Installation Issues**
+
+If you encounter installation problems:
+
+1. Clear your package manager cache: `npm cache clean --force`
+2. Delete `node_modules` and lock files, then reinstall
+3. Ensure you're using Node.js 18+ and npm 9+
+4. Check for conflicting peer dependencies
+
+Still having issues? Visit our [GitHub Issues](https://github.com/availproject/nexus-sdk/issues) or [Discord](https://discord.gg/availproject).
+</Warning>

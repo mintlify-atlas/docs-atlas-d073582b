@@ -1,0 +1,597 @@
+---
+title: 'Intent Management'
+description: 'Track and manage cross-chain intents'
+---
+
+## getMyIntents
+
+Retrieve user's historical intents with pagination.
+
+```typescript
+await sdk.getMyIntents(page?: number): Promise<RequestForFunds[]>
+```
+
+### Parameters
+
+<ParamField path="page" type="number" default="1">
+  Page number for pagination (1-based)
+</ParamField>
+
+### Returns
+
+<ResponseField name="RequestForFunds[]" type="array">
+  Array of user's intents
+  
+  <Expandable title="RequestForFunds properties">
+    <ResponseField name="id" type="number">
+      Intent ID
+    </ResponseField>
+    
+    <ResponseField name="explorerUrl" type="string">
+      Block explorer URL for this intent
+    </ResponseField>
+    
+    <ResponseField name="deposited" type="boolean">
+      Whether deposits have been made
+    </ResponseField>
+    
+    <ResponseField name="fulfilled" type="boolean">
+      Whether the intent has been fulfilled
+    </ResponseField>
+    
+    <ResponseField name="refunded" type="boolean">
+      Whether the intent has been refunded
+    </ResponseField>
+    
+    <ResponseField name="expiry" type="number">
+      Unix timestamp when the intent expires
+    </ResponseField>
+    
+    <ResponseField name="destinationChain" type="object">
+      Destination chain information
+      
+      <Expandable title="properties">
+        <ResponseField name="id" type="number">
+          Chain ID
+        </ResponseField>
+        <ResponseField name="name" type="string">
+          Chain name
+        </ResponseField>
+        <ResponseField name="logo" type="string">
+          Chain logo URL
+        </ResponseField>
+        <ResponseField name="universe" type="string">
+          Universe identifier
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="destinations" type="array">
+      Destination token details
+      
+      <Expandable title="array item properties">
+        <ResponseField name="token" type="object">
+          Token information
+          
+          <Expandable title="properties">
+            <ResponseField name="address" type="Hex">
+              Token contract address
+            </ResponseField>
+            <ResponseField name="symbol" type="string">
+              Token symbol
+            </ResponseField>
+            <ResponseField name="decimals" type="number">
+              Token decimals
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+        
+        <ResponseField name="value" type="string">
+          Amount (human-readable)
+        </ResponseField>
+        
+        <ResponseField name="valueRaw" type="bigint">
+          Amount (raw bigint)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="sources" type="array">
+      Source chain details
+      
+      <Expandable title="array item properties">
+        <ResponseField name="chain" type="object">
+          Source chain information
+        </ResponseField>
+        
+        <ResponseField name="token" type="object">
+          Source token information
+        </ResponseField>
+        
+        <ResponseField name="value" type="string">
+          Amount (human-readable)
+        </ResponseField>
+        
+        <ResponseField name="valueRaw" type="bigint">
+          Amount (raw bigint)
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Fetch Recent Intents
+const intents = await sdk.getMyIntents(1);
+
+console.log(`Found ${intents.length} intents`);
+
+intents.forEach(intent => {
+  console.log('\nIntent #', intent.id);
+  console.log('Status:', {
+    deposited: intent.deposited,
+    fulfilled: intent.fulfilled,
+    refunded: intent.refunded,
+  });
+  console.log('Destination:', intent.destinationChain.name);
+  console.log('Explorer:', intent.explorerUrl);
+});
+```
+
+```typescript Filter Active Intents
+const intents = await sdk.getMyIntents();
+
+// Filter to active (not fulfilled, not refunded)
+const activeIntents = intents.filter(
+  intent => !intent.fulfilled && !intent.refunded
+);
+
+console.log(`${activeIntents.length} active intents:`);
+activeIntents.forEach(intent => {
+  console.log(`Intent #${intent.id}: ${intent.destinationChain.name}`);
+});
+```
+
+```typescript Check Intent Status
+async function getIntentStatus(intentId: number) {
+  const intents = await sdk.getMyIntents(1);
+  const intent = intents.find(i => i.id === intentId);
+  
+  if (!intent) {
+    return 'Not found';
+  }
+  
+  if (intent.fulfilled) {
+    return 'Fulfilled';
+  }
+  
+  if (intent.refunded) {
+    return 'Refunded';
+  }
+  
+  if (intent.deposited) {
+    return 'Pending fulfillment';
+  }
+  
+  const now = Date.now() / 1000;
+  if (now > intent.expiry) {
+    return 'Expired';
+  }
+  
+  return 'Active';
+}
+
+const status = await getIntentStatus(12345);
+console.log('Intent status:', status);
+```
+
+```typescript Display Intent History
+interface IntentHistoryItem {
+  id: number;
+  date: Date;
+  from: string;
+  to: string;
+  amount: string;
+  status: string;
+  explorerUrl: string;
+}
+
+async function getIntentHistory(): Promise<IntentHistoryItem[]> {
+  const intents = await sdk.getMyIntents(1);
+  
+  return intents.map(intent => {
+    const destination = intent.destinations[0];
+    const source = intent.sources[0];
+    
+    let status = 'Pending';
+    if (intent.fulfilled) status = 'Complete';
+    else if (intent.refunded) status = 'Refunded';
+    else if (Date.now() / 1000 > intent.expiry) status = 'Expired';
+    
+    return {
+      id: intent.id,
+      date: new Date(intent.expiry * 1000),
+      from: source.chain.name,
+      to: intent.destinationChain.name,
+      amount: `${destination.value} ${destination.token.symbol}`,
+      status,
+      explorerUrl: intent.explorerUrl,
+    };
+  });
+}
+
+const history = await getIntentHistory();
+console.table(history);
+```
+</CodeGroup>
+
+### Pagination
+
+```typescript
+// Fetch multiple pages
+async function getAllIntents() {
+  const allIntents = [];
+  let page = 1;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const intents = await sdk.getMyIntents(page);
+    
+    if (intents.length === 0) {
+      hasMore = false;
+    } else {
+      allIntents.push(...intents);
+      page++;
+    }
+  }
+  
+  return allIntents;
+}
+
+const allIntents = await getAllIntents();
+console.log(`Total intents: ${allIntents.length}`);
+```
+
+---
+
+## refundIntent
+
+Request a refund for a failed or stuck intent. This triggers the refund process if not already initiated by the system.
+
+```typescript
+await sdk.refundIntent(intentID: number): Promise<void>
+```
+
+### Parameters
+
+<ParamField path="intentID" type="number" required>
+  Intent ID to refund (obtained from `getMyIntents()`)
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```typescript Basic Refund
+// Get intent ID from history
+const intents = await sdk.getMyIntents(1);
+const stuckIntent = intents.find(i => !i.fulfilled && !i.refunded);
+
+if (stuckIntent) {
+  const intentID = stuckIntent.id;
+  
+  try {
+    await sdk.refundIntent(intentID);
+    console.log(`Refund initiated for intent #${intentID}`);
+  } catch (error) {
+    console.error('Refund failed:', error);
+  }
+}
+```
+
+```typescript Refund Expired Intents
+async function refundExpiredIntents() {
+  const intents = await sdk.getMyIntents();
+  const now = Date.now() / 1000;
+  
+  // Find expired, unfulfilled, and not refunded intents
+  const expiredIntents = intents.filter(
+    i => now > i.expiry && !i.fulfilled && !i.refunded
+  );
+  
+  console.log(`Found ${expiredIntents.length} expired intents`);
+  
+  for (const intent of expiredIntents) {
+    try {
+      await sdk.refundIntent(intent.id);
+      console.log(`✓ Refunded intent #${intent.id}`);
+    } catch (error) {
+      console.error(`✗ Failed to refund intent #${intent.id}:`, error);
+    }
+  }
+}
+
+await refundExpiredIntents();
+```
+
+```typescript Refund with Confirmation
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+async function requestRefund(intentID: number) {
+  // Get intent details
+  const intents = await sdk.getMyIntents();
+  const intent = intents.find(i => i.id === intentID);
+  
+  if (!intent) {
+    console.error('Intent not found');
+    return;
+  }
+  
+  if (intent.refunded) {
+    console.log('Intent already refunded');
+    return;
+  }
+  
+  if (intent.fulfilled) {
+    console.log('Intent already fulfilled - cannot refund');
+    return;
+  }
+  
+  // Show confirmation
+  const destination = intent.destinations[0];
+  const confirmed = confirm(
+    `Refund ${destination.value} ${destination.token.symbol}?`
+  );
+  
+  if (!confirmed) {
+    console.log('Refund cancelled');
+    return;
+  }
+  
+  try {
+    await sdk.refundIntent(intentID);
+    console.log('Refund initiated successfully');
+  } catch (error) {
+    if (error instanceof NexusError) {
+      switch (error.code) {
+        case ERROR_CODES.REFUND_FAILED:
+          console.error('Refund failed:', error.message);
+          break;
+        case ERROR_CODES.REFUND_CHECK_ERROR:
+          console.error('Error checking refund eligibility');
+          break;
+        default:
+          console.error('Unexpected error:', error.message);
+      }
+    }
+  }
+}
+```
+</CodeGroup>
+
+### When to Request Refund
+
+Request a refund when:
+
+1. **Intent Expired**: The intent has passed its expiry time without being fulfilled
+2. **Stuck Intent**: The intent has been pending for an unusually long time
+3. **Failed Transaction**: Source deposits were made but fulfillment failed
+
+<Warning>
+  Only unfulfilled intents can be refunded. Fulfilled intents cannot be reversed.
+</Warning>
+
+---
+
+## Intent Hooks
+
+Set up hooks to handle intent approvals:
+
+### setOnIntentHook
+
+Called when the SDK needs user approval for a bridge/transfer intent.
+
+```typescript
+sdk.setOnIntentHook(callback: OnIntentHook): void
+```
+
+#### Example
+
+<CodeGroup>
+```typescript Basic Hook
+sdk.setOnIntentHook(({ intent, allow, deny }) => {
+  // Display intent details
+  console.log('Intent Preview:');
+  console.log('Sources:', intent.sources);
+  console.log('Destination:', intent.destination);
+  console.log('Fees:', intent.fees);
+  
+  // User confirmation
+  const confirmed = confirm(
+    `Bridge ${intent.sourcesTotal} ${intent.token.symbol} to ${intent.destination.chainName}?`
+  );
+  
+  if (confirmed) {
+    allow();
+  } else {
+    deny(); // Throws USER_DENIED_INTENT error
+  }
+});
+```
+
+```typescript With UI Modal
+import { useState } from 'react';
+
+function App() {
+  const [intentModal, setIntentModal] = useState(null);
+  
+  sdk.setOnIntentHook(({ intent, allow, deny }) => {
+    return new Promise((resolve) => {
+      setIntentModal({
+        intent,
+        onConfirm: () => {
+          allow();
+          setIntentModal(null);
+          resolve();
+        },
+        onCancel: () => {
+          deny();
+          setIntentModal(null);
+          resolve();
+        },
+      });
+    });
+  });
+  
+  return (
+    <div>
+      {intentModal && (
+        <IntentConfirmationModal
+          intent={intentModal.intent}
+          onConfirm={intentModal.onConfirm}
+          onCancel={intentModal.onCancel}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+```typescript With Refresh
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  console.log('Initial intent:', intent);
+  
+  // User wants to change source chains
+  const changeSource = confirm('Use different source chains?');
+  
+  if (changeSource) {
+    // Refresh with specific sources
+    const refreshedIntent = await refresh([1, 42161]); // Ethereum + Arbitrum
+    console.log('Refreshed intent:', refreshedIntent);
+    
+    const confirmed = confirm('Approve refreshed intent?');
+    confirmed ? allow() : deny();
+  } else {
+    // Use original intent
+    const confirmed = confirm('Approve intent?');
+    confirmed ? allow() : deny();
+  }
+});
+```
+</CodeGroup>
+
+### Intent Hook Data
+
+<ParamField path="OnIntentHookData" type="object">
+  <Expandable title="properties">
+    <ParamField path="intent" type="ReadableIntent" required>
+      Complete intent details with sources, destination, fees, and token info
+    </ParamField>
+    
+    <ParamField path="allow" type="() => void" required>
+      Call to approve the intent
+    </ParamField>
+    
+    <ParamField path="deny" type="() => void" required>
+      Call to reject the intent (throws `USER_DENIED_INTENT` error)
+    </ParamField>
+    
+    <ParamField path="refresh" type="(selectedSources?: number[]) => Promise<ReadableIntent>" required>
+      Call to refresh the intent with optionally different source chains
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+---
+
+## Tracking Intent Progress
+
+Monitor intent status in real-time:
+
+```typescript
+import { NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+let currentIntentId: number | null = null;
+
+sdk.setOnIntentHook(({ intent, allow }) => {
+  console.log('Intent created');
+  allow();
+});
+
+const result = await sdk.bridge(
+  {
+    token: 'USDC',
+    amount: 100_000_000n,
+    toChainId: 137,
+  },
+  {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+        const step = event.args;
+        
+        if (step.type === 'INTENT_SUBMITTED') {
+          currentIntentId = step.data?.intentID || null;
+          console.log('Intent ID:', currentIntentId);
+          console.log('Track at:', step.data?.explorerURL);
+        }
+        
+        if (step.type === 'INTENT_FULFILLED') {
+          console.log('Intent fulfilled!');
+        }
+      }
+    },
+  }
+);
+
+// Later, check status
+if (currentIntentId) {
+  const intents = await sdk.getMyIntents();
+  const intent = intents.find(i => i.id === currentIntentId);
+  console.log('Intent status:', intent);
+}
+```
+
+---
+
+## Error Handling
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  const intents = await sdk.getMyIntents();
+  
+  // Try to refund an intent
+  if (intents.length > 0) {
+    await sdk.refundIntent(intents[0].id);
+  }
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.REFUND_FAILED:
+        console.error('Refund request failed');
+        break;
+      case ERROR_CODES.REFUND_CHECK_ERROR:
+        console.error('Error checking refund status');
+        break;
+      case ERROR_CODES.SDK_NOT_INITIALIZED:
+        console.error('SDK not initialized');
+        break;
+      default:
+        console.error('Error:', error.message);
+    }
+  }
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Bridge Operations" icon="bridge" href="/api/bridge-operations">
+    Learn about bridge operations
+  </Card>
+  <Card title="Events & Steps" icon="list-check" href="/api/events/bridge-steps">
+    Track operation progress
+  </Card>
+</CardGroup>

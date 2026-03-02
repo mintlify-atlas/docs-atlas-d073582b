@@ -1,0 +1,589 @@
+---
+title: 'Building Progress UIs'
+description: 'Create real-time progress indicators with step tracking in the Nexus SDK'
+icon: 'spinner'
+---
+
+This guide demonstrates how to build user-friendly progress UIs that track the status of bridge, swap, and execute operations in real-time.
+
+## Overview
+
+The Nexus SDK emits detailed step-by-step events during operations, allowing you to:
+
+- Show real-time progress to users
+- Display current step and remaining steps
+- Link to blockchain explorers for transparency
+- Handle errors gracefully with context
+- Build custom progress visualizations
+
+## Event System
+
+All main operations emit two key events:
+
+<CardGroup cols={2}>
+  <Card title="STEPS_LIST" icon="list">
+    Emitted once at the start with all expected steps
+  </Card>
+  <Card title="STEP_COMPLETE" icon="check">
+    Emitted each time a step completes
+  </Card>
+</CardGroup>
+
+## Basic Progress Tracker
+
+<Steps>
+  <Step title="Set up state">
+    Create state to track steps and completion:
+
+    ```typescript
+    import { NEXUS_EVENTS, type BridgeStepType } from '@avail-project/nexus-core';
+
+    // State for tracking progress
+    let allSteps: BridgeStepType[] = [];
+    let completedSteps: Set<string> = new Set();
+    let currentStepIndex = 0;
+
+    function getProgress() {
+      return {
+        total: allSteps.length,
+        completed: completedSteps.size,
+        percentage: Math.round((completedSteps.size / allSteps.length) * 100),
+      };
+    }
+    ```
+  </Step>
+
+  <Step title="Handle events">
+    Listen to events and update state:
+
+    ```typescript
+    const result = await sdk.bridge(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+          // Initialize with all expected steps
+          allSteps = event.args;
+          console.log(`Starting operation with ${allSteps.length} steps`);
+          renderProgressUI();
+        }
+
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          // Mark step as complete
+          const step = event.args;
+          completedSteps.add(step.typeID);
+          currentStepIndex = completedSteps.size - 1;
+
+          console.log(`Completed: ${step.type}`);
+          renderProgressUI();
+
+          // Handle specific steps
+          if (step.data?.explorerURL) {
+            console.log(`View on explorer: ${step.data.explorerURL}`);
+          }
+        }
+      },
+    });
+    ```
+  </Step>
+
+  <Step title="Render progress">
+    Display progress to users:
+
+    ```typescript
+    function renderProgressUI() {
+      const progress = getProgress();
+
+      console.log(`Progress: ${progress.percentage}%`);
+      console.log(`Steps: ${progress.completed}/${progress.total}`);
+
+      allSteps.forEach((step, index) => {
+        const isComplete = completedSteps.has(step.typeID);
+        const isCurrent = index === currentStepIndex + 1;
+
+        const status = isComplete ? '✓' : isCurrent ? '●' : '○';
+        console.log(`${status} ${step.type}`);
+      });
+    }
+    ```
+  </Step>
+</Steps>
+
+## React Progress Component
+
+A complete React example with visual progress:
+
+<CodeGroup>
+```tsx Progress Component
+import { useState, useEffect } from 'react';
+import { NEXUS_EVENTS, type BridgeStepType } from '@avail-project/nexus-core';
+
+interface ProgressTrackerProps {
+  steps: BridgeStepType[];
+  completedSteps: Set<string>;
+}
+
+export function ProgressTracker({ steps, completedSteps }: ProgressTrackerProps) {
+  const progress = Math.round((completedSteps.size / steps.length) * 100);
+
+  return (
+    <div className="progress-container">
+      {/* Progress Bar */}
+      <div className="progress-bar">
+        <div
+          className="progress-fill"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      {/* Progress Text */}
+      <p className="progress-text">
+        {completedSteps.size} of {steps.length} steps complete ({progress}%)
+      </p>
+
+      {/* Step List */}
+      <div className="steps-list">
+        {steps.map((step, index) => {
+          const isComplete = completedSteps.has(step.typeID);
+          const isCurrent =
+            !isComplete && completedSteps.size === index;
+
+          return (
+            <div
+              key={step.typeID}
+              className={`step ${
+                isComplete ? 'complete' : isCurrent ? 'current' : 'pending'
+              }`}
+            >
+              <div className="step-icon">
+                {isComplete ? '✓' : isCurrent ? '●' : '○'}
+              </div>
+              <div className="step-content">
+                <h4>{formatStepName(step.type)}</h4>
+                {step.data?.chainName && (
+                  <p className="step-chain">{step.data.chainName}</p>
+                )}
+                {step.data?.explorerURL && isComplete && (
+                  <a
+                    href={step.data.explorerURL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="step-explorer"
+                  >
+                    View on Explorer →
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function formatStepName(type: string): string {
+  return type
+    .split('_')
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(' ');
+}
+```
+
+```tsx Usage in Component
+import { useState } from 'react';
+import { NexusSDK, NEXUS_EVENTS } from '@avail-project/nexus-core';
+import { ProgressTracker } from './ProgressTracker';
+
+export function BridgeComponent() {
+  const [steps, setSteps] = useState([]);
+  const [completedSteps, setCompletedSteps] = useState(new Set());
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function executeBridge(sdk: NexusSDK, params: any) {
+    setIsLoading(true);
+
+    try {
+      await sdk.bridge(params, {
+        onEvent: (event) => {
+          if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+            setSteps(event.args);
+          }
+
+          if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+            setCompletedSteps((prev) => new Set([...prev, event.args.typeID]));
+          }
+        },
+      });
+
+      alert('Bridge completed successfully!');
+    } catch (error) {
+      console.error('Bridge failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      {isLoading && <ProgressTracker steps={steps} completedSteps={completedSteps} />}
+    </div>
+  );
+}
+```
+
+```css Styles
+.progress-container {
+  padding: 1.5rem;
+  background: #f9fafb;
+  border-radius: 0.5rem;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.step {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+}
+
+.step.complete {
+  border-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.step.current {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.step-icon {
+  font-size: 1.5rem;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step.complete .step-icon {
+  color: #22c55e;
+}
+
+.step.current .step-icon {
+  color: #3b82f6;
+}
+
+.step-content h4 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.step-chain {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.step-explorer {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+.step-explorer:hover {
+  text-decoration: underline;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+```
+</CodeGroup>
+
+## Bridge Step Types
+
+Understand the steps emitted during bridge operations:
+
+| Step Type | Description | Data Available |
+|-----------|-------------|----------------|
+| `INTENT_ACCEPTED` | Intent created and accepted | `intentID` |
+| `INTENT_HASH_SIGNED` | User signed the intent hash | - |
+| `INTENT_SUBMITTED` | Intent submitted to network | `explorerURL`, `txHash` |
+| `INTENT_FULFILLED` | Intent fulfilled by solver | - |
+| `ALLOWANCE_USER_APPROVAL` | Waiting for allowance approval | `chainID`, `chainName` |
+| `ALLOWANCE_APPROVAL_MINED` | Allowance transaction mined | `chainID`, `explorerURL` |
+| `ALLOWANCE_ALL_DONE` | All allowances approved | - |
+| `INTENT_DEPOSIT` | Deposit on source chain | `chainID`, `amount`, `explorerURL` |
+| `INTENT_DEPOSITS_CONFIRMED` | All deposits confirmed | - |
+| `INTENT_COLLECTION` | Collecting from source | `chainID` |
+| `INTENT_COLLECTION_COMPLETE` | All funds collected | - |
+| `APPROVAL` | Token approval for execution | `explorerURL` |
+| `TRANSACTION_SENT` | Execute transaction sent | `txHash`, `explorerURL` |
+| `TRANSACTION_CONFIRMED` | Execute transaction confirmed | `explorerURL` |
+
+## Swap Step Types
+
+Steps emitted during swap operations:
+
+| Step Type | Description |
+|-----------|-------------|
+| `SWAP_START` | Swap operation started |
+| `DETERMINING_SWAP` | Calculating optimal swap route |
+| `CREATE_PERMIT_EOA_TO_EPHEMERAL` | Creating permit for ephemeral wallet |
+| `CREATE_PERMIT_FOR_SOURCE_SWAP` | Creating permit for source swap |
+| `SOURCE_SWAP_BATCH_TX` | Executing source chain swaps |
+| `SOURCE_SWAP_HASH` | Source swap transaction hash |
+| `BRIDGE_DEPOSIT` | Bridge deposit for cross-chain swap |
+| `RFF_ID` | Request for funds ID |
+| `DESTINATION_SWAP_BATCH_TX` | Executing destination swaps |
+| `DESTINATION_SWAP_HASH` | Destination swap transaction hash |
+| `SWAP_COMPLETE` | Swap completed successfully |
+| `SWAP_SKIPPED` | Swap skipped (balance sufficient) |
+
+## Advanced: Multi-Operation Tracker
+
+Track multiple operations simultaneously:
+
+```typescript
+import { NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+class OperationTracker {
+  private operations = new Map<string, {
+    steps: any[];
+    completed: Set<string>;
+    startTime: number;
+  }>();
+
+  startOperation(id: string) {
+    this.operations.set(id, {
+      steps: [],
+      completed: new Set(),
+      startTime: Date.now(),
+    });
+  }
+
+  getEventHandler(operationId: string) {
+    return (event: any) => {
+      const op = this.operations.get(operationId);
+      if (!op) return;
+
+      if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+        op.steps = event.args;
+        this.render();
+      }
+
+      if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+        op.completed.add(event.args.typeID);
+        this.render();
+      }
+    };
+  }
+
+  getProgress(operationId: string) {
+    const op = this.operations.get(operationId);
+    if (!op) return null;
+
+    return {
+      total: op.steps.length,
+      completed: op.completed.size,
+      percentage: Math.round((op.completed.size / op.steps.length) * 100),
+      duration: Date.now() - op.startTime,
+    };
+  }
+
+  render() {
+    console.clear();
+    console.log('Active Operations:');
+    console.log('==================\n');
+
+    for (const [id, op] of this.operations.entries()) {
+      const progress = this.getProgress(id)!;
+      console.log(`${id}: ${progress.percentage}% (${progress.completed}/${progress.total})`);
+      console.log(`Duration: ${(progress.duration / 1000).toFixed(1)}s\n`);
+    }
+  }
+
+  complete(operationId: string) {
+    this.operations.delete(operationId);
+    this.render();
+  }
+}
+
+// Usage
+const tracker = new OperationTracker();
+
+async function executeBridge(params: any) {
+  const operationId = `bridge-${Date.now()}`;
+  tracker.startOperation(operationId);
+
+  try {
+    await sdk.bridge(params, {
+      onEvent: tracker.getEventHandler(operationId),
+    });
+  } finally {
+    tracker.complete(operationId);
+  }
+}
+```
+
+## Vue.js Example
+
+For Vue developers:
+
+```vue
+<template>
+  <div class="progress-container" v-if="isLoading">
+    <div class="progress-bar">
+      <div class="progress-fill" :style="{ width: `${progress}%` }" />
+    </div>
+
+    <p class="progress-text">
+      {{ completedSteps.size }} of {{ steps.length }} steps complete ({{ progress }}%)
+    </p>
+
+    <div class="steps-list">
+      <div
+        v-for="(step, index) in steps"
+        :key="step.typeID"
+        :class="[
+          'step',
+          completedSteps.has(step.typeID) ? 'complete' : '',
+          !completedSteps.has(step.typeID) && completedSteps.size === index ? 'current' : '',
+        ]"
+      >
+        <div class="step-icon">
+          {{ completedSteps.has(step.typeID) ? '✓' : '●' }}
+        </div>
+        <div class="step-content">
+          <h4>{{ formatStepName(step.type) }}</h4>
+          <p v-if="step.data?.chainName" class="step-chain">{{ step.data.chainName }}</p>
+          <a
+            v-if="step.data?.explorerURL && completedSteps.has(step.typeID)"
+            :href="step.data.explorerURL"
+            target="_blank"
+            class="step-explorer"
+          >
+            View on Explorer →
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue';
+import { NEXUS_EVENTS, type BridgeStepType } from '@avail-project/nexus-core';
+
+const steps = ref<BridgeStepType[]>([]);
+const completedSteps = ref(new Set<string>());
+const isLoading = ref(false);
+
+const progress = computed(() =>
+  Math.round((completedSteps.value.size / steps.value.length) * 100)
+);
+
+function formatStepName(type: string): string {
+  return type
+    .split('_')
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+async function executeBridge(sdk: any, params: any) {
+  isLoading.value = true;
+
+  try {
+    await sdk.bridge(params, {
+      onEvent: (event: any) => {
+        if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+          steps.value = event.args;
+        }
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          completedSteps.value.add(event.args.typeID);
+        }
+      },
+    });
+  } finally {
+    isLoading.value = false;
+  }
+}
+</script>
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always initialize with STEPS_LIST">
+    The `STEPS_LIST` event tells you all expected steps upfront. Use it to initialize your UI and show users what to expect.
+  </Accordion>
+
+  <Accordion title="Use typeID for tracking">
+    Each step has a unique `typeID`. Use it (not the `type` name) to track completion, as some steps may repeat.
+  </Accordion>
+
+  <Accordion title="Display explorer links">
+    When `step.data.explorerURL` is available, show it to users for transparency and debugging.
+  </Accordion>
+
+  <Accordion title="Handle errors gracefully">
+    If an operation fails, display the last completed step and error context to help users understand what happened.
+  </Accordion>
+
+  <Accordion title="Show time estimates">
+    Track `startTime` and show elapsed time. Most operations complete in 30-120 seconds.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic Bridge" icon="bridge" href="/examples/basic-bridge">
+    Learn bridge operations with events
+  </Card>
+  <Card title="Swap Examples" icon="arrow-right-arrow-left" href="/examples/swap-exact-in">
+    Implement swap progress tracking
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Handle errors in progress UIs
+  </Card>
+  <Card title="Events Reference" icon="book" href="/api/events/bridge-steps">
+    Complete events API documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,558 @@
+---
+title: 'Custom Network Configuration'
+description: 'Configure custom network endpoints and environments'
+icon: 'network-wired'
+---
+
+## Overview
+
+The Nexus SDK supports **mainnet** and **testnet** environments out of the box. For advanced use cases, you can provide a **custom network configuration** to connect to different environments or use custom endpoints.
+
+<Info>
+Most applications should use the built-in `'mainnet'` or `'testnet'` configurations. Custom network configuration is primarily for development, testing, or enterprise deployments.
+</Info>
+
+## Built-in Networks
+
+### Mainnet (Coral)
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({
+  network: 'mainnet',
+});
+
+await sdk.initialize(window.ethereum);
+```
+
+Mainnet configuration connects to Avail's production infrastructure:
+
+- **Cosmos REST:** `https://cosmos01-testnet.arcana.network`
+- **Cosmos RPC:** `https://cosmos01-testnet.arcana.network:26650`
+- **VSC Base:** `https://vsc1-testnet.arcana.network`
+- **Intent Explorer:** `https://explorer.nexus.availproject.org`
+- **Environment:** `CORAL`
+
+### Testnet (Folly)
+
+```typescript
+const sdk = new NexusSDK({
+  network: 'testnet',
+});
+
+await sdk.initialize(window.ethereum);
+```
+
+Testnet configuration connects to Avail's test environment:
+
+- **Cosmos REST:** `https://cosmos04-dev.arcana.network`
+- **Cosmos RPC:** `https://cosmos04-dev.arcana.network:26650`
+- **VSC Base:** `https://vsc1-folly.arcana.network`
+- **Intent Explorer:** `https://explorer.nexus-folly.availproject.org`
+- **Environment:** `FOLLY`
+
+<Warning>
+Testnet uses test tokens with no real value. Use mainnet for production applications.
+</Warning>
+
+## Custom Network Configuration
+
+### NetworkConfig Interface
+
+Define a custom network configuration:
+
+```typescript
+import { NexusSDK, Environment } from '@avail-project/nexus-core';
+import type { NetworkConfig } from '@avail-project/nexus-core';
+
+const customConfig: NetworkConfig = {
+  COSMOS_REST_URL: 'https://your-cosmos-rest.example.com',
+  COSMOS_RPC_URL: 'https://your-cosmos-rpc.example.com:26650',
+  COSMOS_WS_URL: 'wss://your-cosmos-ws.example.com:26650/websocket',
+  COSMOS_GRPC_URL: 'https://your-grpc.example.com',
+  VSC_BASE_URL: 'https://your-vsc.example.com',
+  VSC_WS_URL: 'wss://your-vsc-ws.example.com',
+  INTENT_EXPLORER_URL: 'https://your-explorer.example.com',
+  NETWORK_HINT: Environment.CORAL, // or Environment.FOLLY
+};
+
+const sdk = new NexusSDK({
+  network: customConfig,
+});
+
+await sdk.initialize(window.ethereum);
+```
+
+### Configuration Fields
+
+<ParamField path="COSMOS_REST_URL" type="string" required>
+  Cosmos REST API endpoint for querying chain state and submitting transactions.
+  
+  Example: `https://cosmos-api.example.com`
+</ParamField>
+
+<ParamField path="COSMOS_RPC_URL" type="string" required>
+  Cosmos RPC endpoint for direct node communication.
+  
+  Example: `https://cosmos-rpc.example.com:26650`
+</ParamField>
+
+<ParamField path="COSMOS_WS_URL" type="string" required>
+  Cosmos WebSocket endpoint for real-time event subscriptions.
+  
+  Example: `wss://cosmos-ws.example.com:26650/websocket`
+</ParamField>
+
+<ParamField path="COSMOS_GRPC_URL" type="string" required>
+  Cosmos gRPC endpoint for high-performance queries.
+  
+  Example: `https://grpc.example.com`
+</ParamField>
+
+<ParamField path="VSC_BASE_URL" type="string" required>
+  Validator Service Coordinator base URL for intent management.
+  
+  Example: `https://vsc.example.com`
+</ParamField>
+
+<ParamField path="VSC_WS_URL" type="string" required>
+  VSC WebSocket endpoint for real-time intent updates.
+  
+  Example: `wss://vsc-ws.example.com`
+</ParamField>
+
+<ParamField path="INTENT_EXPLORER_URL" type="string" required>
+  Intent explorer base URL for viewing transaction details.
+  
+  Example: `https://explorer.example.com`
+</ParamField>
+
+<ParamField path="NETWORK_HINT" type="Environment" required>
+  Environment hint for chain-specific logic. Use `Environment.CORAL` for mainnet-like environments or `Environment.FOLLY` for testnet-like environments.
+</ParamField>
+
+## Use Cases
+
+### Development Environment
+
+Connect to local development infrastructure:
+
+```typescript
+import { Environment } from '@avail-project/nexus-core';
+
+const devConfig: NetworkConfig = {
+  COSMOS_REST_URL: 'http://localhost:1317',
+  COSMOS_RPC_URL: 'http://localhost:26657',
+  COSMOS_WS_URL: 'ws://localhost:26657/websocket',
+  COSMOS_GRPC_URL: 'http://localhost:9090',
+  VSC_BASE_URL: 'http://localhost:3000',
+  VSC_WS_URL: 'ws://localhost:3000',
+  INTENT_EXPLORER_URL: 'http://localhost:8080',
+  NETWORK_HINT: Environment.FOLLY,
+};
+
+const sdk = new NexusSDK({
+  network: devConfig,
+  debug: true, // Enable debug logging
+});
+```
+
+### Staging Environment
+
+Use dedicated staging infrastructure:
+
+```typescript
+const stagingConfig: NetworkConfig = {
+  COSMOS_REST_URL: 'https://cosmos-staging.example.com',
+  COSMOS_RPC_URL: 'https://cosmos-staging.example.com:26650',
+  COSMOS_WS_URL: 'wss://cosmos-staging.example.com:26650/websocket',
+  COSMOS_GRPC_URL: 'https://grpc-staging.example.com',
+  VSC_BASE_URL: 'https://vsc-staging.example.com',
+  VSC_WS_URL: 'wss://vsc-staging.example.com',
+  INTENT_EXPLORER_URL: 'https://explorer-staging.example.com',
+  NETWORK_HINT: Environment.FOLLY,
+};
+
+const sdk = new NexusSDK({
+  network: stagingConfig,
+});
+```
+
+### Enterprise Private Network
+
+Connect to a private Avail deployment:
+
+```typescript
+const enterpriseConfig: NetworkConfig = {
+  COSMOS_REST_URL: process.env.COSMOS_REST_URL!,
+  COSMOS_RPC_URL: process.env.COSMOS_RPC_URL!,
+  COSMOS_WS_URL: process.env.COSMOS_WS_URL!,
+  COSMOS_GRPC_URL: process.env.COSMOS_GRPC_URL!,
+  VSC_BASE_URL: process.env.VSC_BASE_URL!,
+  VSC_WS_URL: process.env.VSC_WS_URL!,
+  INTENT_EXPLORER_URL: process.env.INTENT_EXPLORER_URL!,
+  NETWORK_HINT: Environment.CORAL,
+};
+
+const sdk = new NexusSDK({
+  network: enterpriseConfig,
+  analytics: {
+    enabled: true,
+    posthogApiKey: process.env.POSTHOG_KEY,
+    posthogApiHost: process.env.POSTHOG_HOST,
+  },
+});
+```
+
+## Environment Types
+
+The SDK supports two environment types via `NETWORK_HINT`:
+
+### Environment.CORAL (Mainnet)
+
+```typescript
+import { Environment } from '@avail-project/nexus-core';
+
+const config: NetworkConfig = {
+  // ... other fields
+  NETWORK_HINT: Environment.CORAL,
+};
+```
+
+Use `CORAL` for:
+- Production deployments
+- Mainnet chains
+- Real asset transactions
+
+### Environment.FOLLY (Testnet)
+
+```typescript
+import { Environment } from '@avail-project/nexus-core';
+
+const config: NetworkConfig = {
+  // ... other fields
+  NETWORK_HINT: Environment.FOLLY,
+};
+```
+
+Use `FOLLY` for:
+- Development environments
+- Test chains
+- Testing and QA
+
+<Info>
+The `NETWORK_HINT` affects which chain configurations and token addresses are used internally.
+</Info>
+
+## Configuration Validation
+
+The SDK validates network configurations at runtime:
+
+```typescript
+const config: NetworkConfig = {
+  // Missing required fields will cause initialization to fail
+  COSMOS_REST_URL: 'https://example.com',
+  // ... other required fields
+};
+
+try {
+  const sdk = new NexusSDK({ network: config });
+  await sdk.initialize(window.ethereum);
+} catch (error) {
+  console.error('Invalid network configuration:', error);
+}
+```
+
+### Required Fields Validation
+
+All fields are required. Missing or invalid fields will throw an error:
+
+```typescript
+// ❌ Invalid - missing fields
+const invalidConfig = {
+  COSMOS_REST_URL: 'https://example.com',
+  // Missing other required fields
+};
+
+// ✅ Valid - all fields present
+const validConfig: NetworkConfig = {
+  COSMOS_REST_URL: 'https://cosmos.example.com',
+  COSMOS_RPC_URL: 'https://cosmos.example.com:26650',
+  COSMOS_WS_URL: 'wss://cosmos.example.com:26650/websocket',
+  COSMOS_GRPC_URL: 'https://grpc.example.com',
+  VSC_BASE_URL: 'https://vsc.example.com',
+  VSC_WS_URL: 'wss://vsc.example.com',
+  INTENT_EXPLORER_URL: 'https://explorer.example.com',
+  NETWORK_HINT: Environment.CORAL,
+};
+```
+
+## Dynamic Configuration
+
+Load configuration from environment variables or configuration files:
+
+### Environment Variables
+
+```typescript
+// .env file
+COSMOS_REST_URL=https://cosmos-api.example.com
+COSMOS_RPC_URL=https://cosmos-rpc.example.com:26650
+COSMOS_WS_URL=wss://cosmos-ws.example.com:26650/websocket
+COSMOS_GRPC_URL=https://grpc.example.com
+VSC_BASE_URL=https://vsc.example.com
+VSC_WS_URL=wss://vsc-ws.example.com
+INTENT_EXPLORER_URL=https://explorer.example.com
+NETWORK_HINT=CORAL
+```
+
+```typescript
+import { Environment } from '@avail-project/nexus-core';
+
+function getNetworkConfig(): NetworkConfig {
+  return {
+    COSMOS_REST_URL: process.env.COSMOS_REST_URL!,
+    COSMOS_RPC_URL: process.env.COSMOS_RPC_URL!,
+    COSMOS_WS_URL: process.env.COSMOS_WS_URL!,
+    COSMOS_GRPC_URL: process.env.COSMOS_GRPC_URL!,
+    VSC_BASE_URL: process.env.VSC_BASE_URL!,
+    VSC_WS_URL: process.env.VSC_WS_URL!,
+    INTENT_EXPLORER_URL: process.env.INTENT_EXPLORER_URL!,
+    NETWORK_HINT: process.env.NETWORK_HINT === 'CORAL' 
+      ? Environment.CORAL 
+      : Environment.FOLLY,
+  };
+}
+
+const sdk = new NexusSDK({
+  network: getNetworkConfig(),
+});
+```
+
+### Configuration File
+
+```typescript
+// config/networks.ts
+import { Environment } from '@avail-project/nexus-core';
+import type { NetworkConfig } from '@avail-project/nexus-core';
+
+export const networks: Record<string, NetworkConfig> = {
+  production: {
+    COSMOS_REST_URL: 'https://cosmos-prod.example.com',
+    COSMOS_RPC_URL: 'https://cosmos-prod.example.com:26650',
+    COSMOS_WS_URL: 'wss://cosmos-prod.example.com:26650/websocket',
+    COSMOS_GRPC_URL: 'https://grpc-prod.example.com',
+    VSC_BASE_URL: 'https://vsc-prod.example.com',
+    VSC_WS_URL: 'wss://vsc-prod.example.com',
+    INTENT_EXPLORER_URL: 'https://explorer-prod.example.com',
+    NETWORK_HINT: Environment.CORAL,
+  },
+  staging: {
+    COSMOS_REST_URL: 'https://cosmos-staging.example.com',
+    COSMOS_RPC_URL: 'https://cosmos-staging.example.com:26650',
+    COSMOS_WS_URL: 'wss://cosmos-staging.example.com:26650/websocket',
+    COSMOS_GRPC_URL: 'https://grpc-staging.example.com',
+    VSC_BASE_URL: 'https://vsc-staging.example.com',
+    VSC_WS_URL: 'wss://vsc-staging.example.com',
+    INTENT_EXPLORER_URL: 'https://explorer-staging.example.com',
+    NETWORK_HINT: Environment.FOLLY,
+  },
+};
+
+// Usage
+import { networks } from './config/networks';
+
+const env = process.env.APP_ENV || 'production';
+const sdk = new NexusSDK({
+  network: networks[env],
+});
+```
+
+## Switching Networks at Runtime
+
+To switch networks, create a new SDK instance:
+
+```typescript
+let sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(provider);
+
+// Switch to testnet
+await sdk.deinit(); // Clean up current instance
+sdk = new NexusSDK({ network: 'testnet' });
+await sdk.initialize(provider);
+```
+
+<Warning>
+Always call `deinit()` before creating a new SDK instance to clean up resources and event listeners.
+</Warning>
+
+## SIWE Chain Configuration
+
+Configure the chain used for Sign-In with Ethereum (SIWE):
+
+```typescript
+const sdk = new NexusSDK({
+  network: 'mainnet',
+  siweChain: 1, // Use Ethereum mainnet (chain ID 1) for SIWE
+});
+
+// Or use a different chain
+const sdk2 = new NexusSDK({
+  network: 'testnet',
+  siweChain: 11155111, // Use Sepolia testnet for SIWE
+});
+```
+
+<ParamField path="siweChain" type="number" default="1">
+  Chain ID to use for SIWE (Sign-In with Ethereum) authentication. Defaults to Ethereum mainnet (1).
+</ParamField>
+
+## Debugging Network Issues
+
+Enable debug mode to troubleshoot network configuration:
+
+```typescript
+const sdk = new NexusSDK({
+  network: customConfig,
+  debug: true, // Enable SDK debug logging
+  analytics: {
+    debug: true, // Enable analytics debug logging
+  },
+});
+
+// Debug logs will show:
+// - Network endpoints being used
+// - Connection status
+// - Request/response details
+// - Error details
+```
+
+## Best Practices
+
+### Use Built-in Networks for Production
+
+```typescript
+// ✅ Recommended for production
+const sdk = new NexusSDK({
+  network: 'mainnet',
+});
+
+// ❌ Avoid custom configs unless necessary
+const sdk = new NexusSDK({
+  network: customConfig, // Only if you have specific requirements
+});
+```
+
+### Validate Configuration
+
+```typescript
+import type { NetworkConfig } from '@avail-project/nexus-core';
+
+function validateConfig(config: NetworkConfig): boolean {
+  const requiredFields: (keyof NetworkConfig)[] = [
+    'COSMOS_REST_URL',
+    'COSMOS_RPC_URL',
+    'COSMOS_WS_URL',
+    'COSMOS_GRPC_URL',
+    'VSC_BASE_URL',
+    'VSC_WS_URL',
+    'INTENT_EXPLORER_URL',
+    'NETWORK_HINT',
+  ];
+
+  return requiredFields.every(field => {
+    const value = config[field];
+    return value !== undefined && value !== null && value !== '';
+  });
+}
+
+if (!validateConfig(customConfig)) {
+  throw new Error('Invalid network configuration');
+}
+```
+
+### Use Environment-Specific Configs
+
+```typescript
+function getNetworkForEnv(): 'mainnet' | 'testnet' | NetworkConfig {
+  switch (process.env.NODE_ENV) {
+    case 'production':
+      return 'mainnet';
+    case 'test':
+    case 'development':
+      return 'testnet';
+    default:
+      return 'testnet';
+  }
+}
+
+const sdk = new NexusSDK({
+  network: getNetworkForEnv(),
+});
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection timeout errors">
+    Verify that all endpoint URLs are accessible and using the correct protocol (HTTP/HTTPS, WS/WSS).
+
+    ```typescript
+    // Test endpoints manually
+    fetch(config.COSMOS_REST_URL)
+      .then(res => console.log('REST OK'))
+      .catch(err => console.error('REST failed:', err));
+    ```
+  </Accordion>
+
+  <Accordion title="Invalid network hint error">
+    Ensure `NETWORK_HINT` is set to a valid `Environment` enum value:
+
+    ```typescript
+    import { Environment } from '@avail-project/nexus-core';
+
+    // ✅ Correct
+    NETWORK_HINT: Environment.CORAL
+
+    // ❌ Incorrect
+    NETWORK_HINT: 'CORAL' // String instead of enum
+    ```
+  </Accordion>
+
+  <Accordion title="WebSocket connection failures">
+    Ensure WebSocket URLs use the correct protocol:
+
+    ```typescript
+    // ✅ Correct
+    COSMOS_WS_URL: 'wss://secure.example.com/websocket'
+    VSC_WS_URL: 'wss://vsc.example.com'
+
+    // ❌ Incorrect (HTTP instead of WS)
+    COSMOS_WS_URL: 'https://example.com/websocket'
+    ```
+  </Accordion>
+
+  <Accordion title="Chain mismatch errors">
+    Verify that `NETWORK_HINT` matches your infrastructure:
+
+    - Use `Environment.CORAL` for mainnet chains
+    - Use `Environment.FOLLY` for testnet chains
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Initialization" icon="play" href="/concepts/initialization">
+    Learn about SDK initialization and lifecycle
+  </Card>
+  <Card title="Supported Networks" icon="globe" href="/resources/supported-networks">
+    View all supported blockchain networks
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Handle network configuration errors
+  </Card>
+  <Card title="Analytics" icon="chart-line" href="/advanced/analytics">
+    Track network performance with analytics
+  </Card>
+</CardGroup>

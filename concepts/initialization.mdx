@@ -1,0 +1,365 @@
+---
+title: "Initialization"
+description: "Learn how to initialize and configure the Avail Nexus SDK"
+---
+
+## Overview
+
+The Avail Nexus SDK requires proper initialization before you can perform cross-chain operations. This guide covers the initialization process, configuration options, and lifecycle management.
+
+## Installation
+
+First, install the SDK package:
+
+```bash
+npm install @avail-project/nexus-core
+```
+
+## Basic Initialization
+
+<Steps>
+  <Step title="Create SDK Instance">
+    Import and create a new SDK instance with your desired network configuration:
+
+    ```typescript
+    import { NexusSDK } from '@avail-project/nexus-core';
+
+    const sdk = new NexusSDK({
+      network: 'mainnet', // or 'testnet'
+      debug: false,
+    });
+    ```
+  </Step>
+
+  <Step title="Initialize with Provider">
+    Connect the SDK to an EVM wallet provider (EIP-1193 compatible):
+
+    ```typescript
+    // For browser wallets like MetaMask
+    await sdk.initialize(window.ethereum);
+
+    // For WalletConnect or other providers
+    await sdk.initialize(walletConnectProvider);
+    ```
+  </Step>
+
+  <Step title="Verify Initialization">
+    Check if the SDK is ready to use:
+
+    ```typescript
+    if (sdk.isInitialized()) {
+      console.log('SDK is ready!');
+    }
+    ```
+  </Step>
+</Steps>
+
+## Configuration Options
+
+The SDK accepts several configuration parameters during instantiation:
+
+```typescript
+const sdk = new NexusSDK({
+  // Network: 'mainnet' | 'testnet' | custom NetworkConfig
+  network: 'mainnet',
+
+  // Enable debug logging
+  debug: false,
+
+  // Chain ID for SIWE (Sign-In with Ethereum) signing
+  siweChain: 1,
+
+  // Analytics configuration
+  analytics: {
+    enabled: true,
+    privacy: {
+      anonymizeWallets: true,
+      anonymizeAmounts: true,
+    },
+  },
+});
+```
+
+### Network Configuration
+
+<Accordion title="Mainnet Configuration">
+  ```typescript
+  const mainnetSdk = new NexusSDK({ network: 'mainnet' });
+  ```
+
+  Connects to production networks including Ethereum, Base, Arbitrum, Optimism, Polygon, and more.
+</Accordion>
+
+<Accordion title="Testnet Configuration">
+  ```typescript
+  const testnetSdk = new NexusSDK({ network: 'testnet' });
+  ```
+
+  Connects to test networks including Sepolia, Base Sepolia, Arbitrum Sepolia, and others.
+</Accordion>
+
+<Accordion title="Custom Network Configuration">
+  ```typescript
+  const customSdk = new NexusSDK({
+    network: {
+      // Custom network configuration object
+      // Advanced use case - see NetworkConfig type
+    },
+  });
+  ```
+</Accordion>
+
+### Debug Mode
+
+Enable detailed logging for development and troubleshooting:
+
+```typescript
+const sdk = new NexusSDK({
+  network: 'testnet',
+  debug: true, // Enables verbose logging
+});
+```
+
+<Warning>
+  Debug mode should be disabled in production to avoid performance overhead and exposing sensitive information in logs.
+</Warning>
+
+### SIWE Chain Configuration
+
+Specify which chain to use for Sign-In with Ethereum (SIWE) messages:
+
+```typescript
+const sdk = new NexusSDK({
+  network: 'mainnet',
+  siweChain: 1, // Ethereum mainnet (default)
+});
+```
+
+## Lifecycle Methods
+
+### initialize(provider)
+
+Initializes the SDK with an EVM-compatible wallet provider.
+
+```typescript
+await sdk.initialize(window.ethereum);
+```
+
+**Parameters:**
+- `provider` (EthereumProvider): EIP-1193 compatible provider (MetaMask, WalletConnect, etc.)
+
+**Returns:** `Promise<void>`
+
+### setEVMProvider(provider)
+
+Update the EVM provider without full re-initialization. Useful for switching wallets or when the provider changes.
+
+```typescript
+await sdk.setEVMProvider(newProvider);
+```
+
+<Info>
+  This method updates the provider but doesn't perform full initialization. Use `initialize()` for the initial setup.
+</Info>
+
+### isInitialized()
+
+Check if the SDK is fully initialized and ready to use.
+
+```typescript
+if (sdk.isInitialized()) {
+  // Safe to call SDK methods
+  const balances = await sdk.getBalancesForBridge();
+}
+```
+
+**Returns:** `boolean`
+
+### triggerAccountChange()
+
+Manually trigger account change detection. Useful for wallet integrations that don't support event listeners.
+
+```typescript
+sdk.triggerAccountChange();
+```
+
+<Note>
+  Most modern wallets automatically emit `accountsChanged` events. This method is only needed for special wallet integrations.
+</Note>
+
+### deinit()
+
+Clean up SDK resources and event listeners. Call when unmounting your application or disconnecting the wallet.
+
+```typescript
+await sdk.deinit();
+```
+
+<Warning>
+  After calling `deinit()`, you must call `initialize()` again before using the SDK.
+</Warning>
+
+## Complete Example
+
+Here's a complete example showing proper SDK initialization and lifecycle management:
+
+```typescript
+import { NexusSDK, NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+class WalletManager {
+  private sdk: NexusSDK;
+
+  constructor() {
+    // Create SDK instance
+    this.sdk = new NexusSDK({
+      network: 'mainnet',
+      debug: process.env.NODE_ENV === 'development',
+      siweChain: 1,
+      analytics: {
+        enabled: true,
+        privacy: {
+          anonymizeWallets: true,
+          anonymizeAmounts: true,
+        },
+      },
+    });
+  }
+
+  async connect() {
+    try {
+      // Request wallet connection
+      if (!window.ethereum) {
+        throw new Error('No wallet found');
+      }
+
+      // Initialize SDK with provider
+      await this.sdk.initialize(window.ethereum);
+
+      // Verify initialization
+      if (this.sdk.isInitialized()) {
+        console.log('✓ SDK initialized successfully');
+        return true;
+      }
+    } catch (error) {
+      console.error('Failed to initialize SDK:', error);
+      return false;
+    }
+  }
+
+  async disconnect() {
+    // Clean up SDK resources
+    await this.sdk.deinit();
+    console.log('✓ SDK deinitialized');
+  }
+
+  async switchWallet(newProvider: any) {
+    // Update provider without full reinitialization
+    await this.sdk.setEVMProvider(newProvider);
+    console.log('✓ Wallet switched');
+  }
+
+  getSDK() {
+    if (!this.sdk.isInitialized()) {
+      throw new Error('SDK not initialized. Call connect() first.');
+    }
+    return this.sdk;
+  }
+}
+
+// Usage
+const walletManager = new WalletManager();
+await walletManager.connect();
+
+// Use SDK
+const sdk = walletManager.getSDK();
+const balances = await sdk.getBalancesForBridge();
+
+// Clean up when done
+await walletManager.disconnect();
+```
+
+## Provider Compatibility
+
+The SDK works with any EIP-1193 compatible provider:
+
+<Accordion title="MetaMask">
+  ```typescript
+  await sdk.initialize(window.ethereum);
+  ```
+</Accordion>
+
+<Accordion title="WalletConnect">
+  ```typescript
+  import { EthereumProvider } from '@walletconnect/ethereum-provider';
+
+  const provider = await EthereumProvider.init({
+    projectId: 'YOUR_PROJECT_ID',
+    chains: [1],
+    showQrModal: true,
+  });
+
+  await provider.enable();
+  await sdk.initialize(provider);
+  ```
+</Accordion>
+
+<Accordion title="Coinbase Wallet">
+  ```typescript
+  import CoinbaseWalletSDK from '@coinbase/wallet-sdk';
+
+  const coinbaseWallet = new CoinbaseWalletSDK({
+    appName: 'Your App',
+    appLogoUrl: 'https://example.com/logo.png',
+  });
+
+  const provider = coinbaseWallet.makeWeb3Provider();
+  await sdk.initialize(provider);
+  ```
+</Accordion>
+
+## Checking Provider Status
+
+Verify that the SDK has an active provider:
+
+```typescript
+if (sdk.hasEvmProvider) {
+  console.log('Provider is connected');
+} else {
+  console.log('No provider connected');
+}
+```
+
+## Error Handling
+
+Always handle initialization errors appropriately:
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.initialize(window.ethereum);
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.WALLET_NOT_CONNECTED:
+        console.error('Please connect your wallet');
+        break;
+      case ERROR_CODES.CONNECT_ACCOUNT_FAILED:
+        console.error('Failed to connect account. Please try again.');
+        break;
+      default:
+        console.error('Initialization failed:', error.message);
+    }
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+## Next Steps
+
+Now that you understand SDK initialization, learn about:
+
+- [Intents](/concepts/intents) - Understanding the intent-based architecture
+- [Hooks](/concepts/hooks) - Setting up user approval workflows
+- [Events](/concepts/events) - Tracking operation progress

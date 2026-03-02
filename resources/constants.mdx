@@ -1,0 +1,435 @@
+---
+title: Constants
+description: Exported constants, events, and step types in the Avail Nexus SDK
+icon: list
+---
+
+The Avail Nexus SDK exports various constants for events, steps, chain IDs, and metadata. This reference covers all exported constant values.
+
+## Events
+
+Event name constants used in `onEvent` callbacks.
+
+### NEXUS_EVENTS
+
+Use these constants to identify events in your callbacks:
+
+```typescript
+import { NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+export const NEXUS_EVENTS = {
+  STEP_COMPLETE: 'STEP_COMPLETE',
+  SWAP_STEP_COMPLETE: 'SWAP_STEP_COMPLETE',
+  STEPS_LIST: 'STEPS_LIST',
+} as const;
+```
+
+| Event | Description | When Emitted |
+|-------|-------------|-------------|
+| `STEPS_LIST` | Emitted once at operation start with all expected steps | Beginning of bridge/swap operations |
+| `STEP_COMPLETE` | Emitted when a bridge step completes | After each bridge step finishes |
+| `SWAP_STEP_COMPLETE` | Emitted when a swap step completes | After each swap step finishes |
+
+**Example usage**:
+
+```typescript
+await sdk.bridge(params, {
+  onEvent: (event) => {
+    switch (event.name) {
+      case NEXUS_EVENTS.STEPS_LIST:
+        console.log('All steps:', event.args);
+        break;
+      case NEXUS_EVENTS.STEP_COMPLETE:
+        console.log('Step done:', event.args);
+        break;
+    }
+  },
+});
+```
+
+## Bridge Steps
+
+Constants for tracking bridge operation progress.
+
+### BRIDGE_STEPS
+
+```typescript
+import { BRIDGE_STEPS } from '@avail-project/nexus-core';
+```
+
+| Step Type | Type ID | Description |
+|-----------|---------|-------------|
+| `INTENT_ACCEPTED` | `IA` | Intent created and accepted by solver |
+| `INTENT_HASH_SIGNED` | `IHS` | User signed the intent hash |
+| `INTENT_SUBMITTED` | `IS` | Intent submitted to the network |
+| `INTENT_FULFILLED` | `IF` | Intent fulfilled by solver |
+| `ALLOWANCE_APPROVAL_REQUEST` | `AUA_{chainId}` | Waiting for user to approve token allowance |
+| `ALLOWANCE_APPROVAL_MINED` | `AAM_{chainId}` | Allowance approval transaction mined |
+| `ALLOWANCE_COMPLETE` | `AAD` | All required allowances approved |
+| `INTENT_DEPOSIT_REQUEST` | `ID_{index}` | Deposit initiated on source chain |
+| `INTENT_DEPOSITS_CONFIRMED` | `UIDC` | All deposits confirmed on source chains |
+| `INTENT_COLLECTION` | `IC_{index}` | Collecting funds from source chain |
+| `INTENT_COLLECTION_COMPLETE` | `ICC` | All funds collected from sources |
+| `EXECUTE_APPROVAL_STEP` | `AP` | Token approval for execution |
+| `EXECUTE_TRANSACTION_SENT` | `TS` | Execute transaction sent to network |
+| `EXECUTE_TRANSACTION_CONFIRMED` | `CN` | Execute transaction confirmed |
+
+### Bridge Step Data Structure
+
+```typescript
+type BridgeStepType = {
+  type: string;   // Step type name
+  typeID: string; // Unique identifier
+  data?: {
+    chainID?: number;
+    chainName?: string;
+    amount?: string;
+    explorerURL?: string;
+    intentID?: number;
+    txHash?: Hex;
+  };
+};
+```
+
+**Example: Tracking bridge progress**
+
+```typescript
+import { NEXUS_EVENTS, BRIDGE_STEPS } from '@avail-project/nexus-core';
+
+const completedSteps = new Set<string>();
+
+await sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      completedSteps.add(event.args.typeID);
+      
+      if (event.args.type === 'INTENT_SUBMITTED') {
+        console.log('View on explorer:', event.args.data?.explorerURL);
+      }
+    }
+  },
+});
+```
+
+## Swap Steps
+
+Constants for tracking swap operation progress.
+
+### SWAP_STEPS
+
+```typescript
+import { SWAP_STEPS } from '@avail-project/nexus-core';
+```
+
+| Step Type | Type ID | Description |
+|-----------|---------|-------------|
+| `SWAP_START` | `SWAP_START` | Swap operation started |
+| `DETERMINING_SWAP` | `DETERMINING_SWAP` | Calculating optimal swap route |
+| `CREATE_PERMIT_EOA_TO_EPHEMERAL` | `CREATE_PERMIT_EOA_TO_EPHEMERAL_{chainId}_{symbol}` | Creating permit for ephemeral wallet |
+| `CREATE_PERMIT_FOR_SOURCE_SWAP` | `CREATE_PERMIT_FOR_SOURCE_SWAP_{chainId}_{symbol}` | Creating permit for source swap |
+| `SOURCE_SWAP_BATCH_TX` | `SOURCE_SWAP_BATCH_TX` | Executing source chain swap batch |
+| `SOURCE_SWAP_HASH` | `SOURCE_SWAP_HASH_{chainId}` | Source swap transaction hash available |
+| `BRIDGE_DEPOSIT` | `BRIDGE_DEPOSIT_{chainId}` | Bridge deposit for cross-chain swap |
+| `RFF_ID` | `RFF_ID` | Request for funds ID assigned |
+| `DESTINATION_SWAP_BATCH_TX` | `DESTINATION_SWAP_BATCH_TX` | Executing destination swap batch |
+| `DESTINATION_SWAP_HASH` | `DESTINATION_SWAP_HASH_{chainId}` | Destination swap transaction hash |
+| `SWAP_COMPLETE` | `SWAP_COMPLETE` | Swap completed successfully |
+| `SWAP_SKIPPED` | `SWAP_SKIPPED` | Swap skipped (sufficient balance exists) |
+
+### Swap Step Data Structure
+
+```typescript
+type SwapStepType = {
+  type: string;
+  typeID: string;
+  completed: boolean;
+  chain?: { id: number; name: string };
+  symbol?: string;
+  explorerURL?: string;
+  data?: any; // Varies by step
+};
+```
+
+**Example: Tracking swap progress**
+
+```typescript
+import { NEXUS_EVENTS, SWAP_STEPS } from '@avail-project/nexus-core';
+
+await sdk.swapWithExactIn(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      if (event.args.type === 'SWAP_SKIPPED') {
+        console.log('Swap skipped - using existing balance');
+      }
+      if (event.args.type === 'SOURCE_SWAP_HASH') {
+        console.log('Source swap:', event.args.explorerURL);
+      }
+    }
+  },
+});
+```
+
+## Chain IDs
+
+Constants for supported blockchain networks.
+
+### MAINNET_CHAIN_IDS
+
+```typescript
+import { MAINNET_CHAIN_IDS } from '@avail-project/nexus-core';
+
+export const MAINNET_CHAIN_IDS = {
+  ETHEREUM: 1,
+  BASE: 8453,
+  ARBITRUM: 42161,
+  OPTIMISM: 10,
+  POLYGON: 137,
+  AVALANCHE: 43114,
+  SCROLL: 534352,
+  KAIA: 8217,
+  CITREA: 4114,
+  BNB: 56,
+  HYPEREVM: 999,
+  MEGAETH: 4326,
+  MONAD: 143,
+} as const;
+```
+
+### TESTNET_CHAIN_IDS
+
+```typescript
+import { TESTNET_CHAIN_IDS } from '@avail-project/nexus-core';
+
+export const TESTNET_CHAIN_IDS = {
+  SEPOLIA: 11155111,
+  BASE_SEPOLIA: 84532,
+  ARBITRUM_SEPOLIA: 421614,
+  CITREA_TESTNET: 5115,
+  OPTIMISM_SEPOLIA: 11155420,
+  POLYGON_AMOY: 80002,
+  MONAD_TESTNET: 10143,
+} as const;
+```
+
+### SUPPORTED_CHAINS
+
+Combination of all mainnet and testnet chains:
+
+```typescript
+import { SUPPORTED_CHAINS } from '@avail-project/nexus-core';
+
+// Use in your code
+const chainId = SUPPORTED_CHAINS.ETHEREUM; // 1
+const baseChain = SUPPORTED_CHAINS.BASE; // 8453
+```
+
+## Chain Metadata
+
+Detailed chain information including RPC URLs and block explorers.
+
+### CHAIN_METADATA
+
+```typescript
+import { CHAIN_METADATA } from '@avail-project/nexus-core';
+
+const ethMetadata = CHAIN_METADATA[1];
+```
+
+**Structure**:
+
+```typescript
+type ChainMetadata = {
+  id: number;
+  name: string;
+  shortName: string;
+  logo: string;
+  nativeCurrency: {
+    name: string;
+    symbol: string;
+    decimals: number;
+  };
+  rpcUrls: string[];
+  blockExplorerUrls: string[];
+};
+```
+
+**Example**:
+
+```typescript
+const polygon = CHAIN_METADATA[137];
+console.log(polygon.name); // "Polygon"
+console.log(polygon.nativeCurrency.symbol); // "MATIC"
+console.log(polygon.rpcUrls[0]); // "https://polygon-rpc.com"
+console.log(polygon.blockExplorerUrls[0]); // "https://polygonscan.com"
+```
+
+## Token Metadata
+
+Token information including symbols, names, and decimals.
+
+### TOKEN_METADATA
+
+```typescript
+import { TOKEN_METADATA } from '@avail-project/nexus-core';
+
+const usdc = TOKEN_METADATA.USDC;
+```
+
+**Structure**:
+
+```typescript
+type TokenMetadata = {
+  symbol: string;
+  name: string;
+  decimals: number;
+  icon: string;
+  coingeckoId: string;
+  isNative?: boolean;
+};
+```
+
+**Available tokens**:
+
+```typescript
+// Mainnet tokens
+TOKEN_METADATA.ETH
+TOKEN_METADATA.USDC
+TOKEN_METADATA.USDT
+
+// Access metadata
+const usdc = TOKEN_METADATA.USDC;
+console.log(usdc.decimals); // 6
+console.log(usdc.name); // "USD Coin"
+```
+
+## Token Contract Addresses
+
+Token addresses across all supported chains.
+
+### TOKEN_CONTRACT_ADDRESSES
+
+```typescript
+import { TOKEN_CONTRACT_ADDRESSES, SUPPORTED_CHAINS } from '@avail-project/nexus-core';
+
+// Get USDC address on Ethereum
+const usdcOnEth = TOKEN_CONTRACT_ADDRESSES.USDC[SUPPORTED_CHAINS.ETHEREUM];
+// "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+
+// Get USDT on Polygon
+const usdtOnPolygon = TOKEN_CONTRACT_ADDRESSES.USDT[SUPPORTED_CHAINS.POLYGON];
+// "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
+```
+
+**Structure**:
+
+```typescript
+export const TOKEN_CONTRACT_ADDRESSES = {
+  USDC: {
+    [chainId: number]: '0x...'
+  },
+  USDT: {
+    [chainId: number]: '0x...'
+  },
+  USDM: {
+    [chainId: number]: '0x...'
+  },
+} as const;
+```
+
+See [Supported Tokens](/resources/supported-tokens) for complete address list.
+
+## Error Codes
+
+All error code constants.
+
+### ERROR_CODES
+
+```typescript
+import { ERROR_CODES } from '@avail-project/nexus-core';
+
+// Use in error handling
+try {
+  await sdk.bridge(params);
+} catch (error) {
+  if (error.code === ERROR_CODES.INSUFFICIENT_BALANCE) {
+    // Handle insufficient balance
+  }
+}
+```
+
+See [Error Codes](/resources/error-codes) for complete reference.
+
+## Other Constants
+
+### Intent Expiry
+
+Intent expiration time (used internally):
+
+```typescript
+const INTENT_EXPIRY = 15 * 60 * 1000; // 15 minutes in milliseconds
+```
+
+### Zero Address
+
+Constants for native token representation:
+
+```typescript
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const ZERO_ADDRESS_BYTES_32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
+```
+
+Native tokens (ETH, MATIC, etc.) use the zero address in swap operations.
+
+## Complete Import Example
+
+```typescript
+import {
+  // Events
+  NEXUS_EVENTS,
+  
+  // Steps
+  BRIDGE_STEPS,
+  SWAP_STEPS,
+  
+  // Chain IDs
+  SUPPORTED_CHAINS,
+  MAINNET_CHAIN_IDS,
+  TESTNET_CHAIN_IDS,
+  
+  // Metadata
+  CHAIN_METADATA,
+  TOKEN_METADATA,
+  TOKEN_CONTRACT_ADDRESSES,
+  
+  // Errors
+  ERROR_CODES,
+  
+  // Types
+  type BridgeStepType,
+  type SwapStepType,
+  type ChainMetadata,
+  type TokenMetadata,
+} from '@avail-project/nexus-core';
+
+// Use constants in your application
+const sdk = new NexusSDK({ network: 'mainnet' });
+
+await sdk.bridge(
+  {
+    token: 'USDC',
+    amount: 100_000_000n,
+    toChainId: SUPPORTED_CHAINS.POLYGON, // Use constant
+  },
+  {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+        console.log('Step completed:', event.args.type);
+      }
+    },
+  }
+);
+```
+
+<Info>
+  All constants are typed with TypeScript's `as const` for maximum type safety and autocomplete support.
+</Info>

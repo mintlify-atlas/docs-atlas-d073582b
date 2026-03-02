@@ -1,0 +1,662 @@
+---
+title: Error Codes
+description: Comprehensive reference of all error codes in the Avail Nexus SDK
+icon: triangle-exclamation
+---
+
+The Nexus SDK provides structured error handling through the `NexusError` class. All errors include a specific error code, message, and optional contextual data.
+
+## Error Structure
+
+```typescript
+class NexusError extends Error {
+  readonly code: ErrorCode;
+  readonly data?: {
+    context?: string;              // Where or why it happened
+    cause?: unknown;               // Nested error
+    details?: Record<string, unknown>; // Additional structured info
+  };
+}
+```
+
+## Error Handling Example
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.bridge({ token: 'USDC', amount: 1_000_000n, toChainId: 137 });
+} catch (error) {
+  if (error instanceof NexusError) {
+    console.error(`Error Code: ${error.code}`);
+    console.error(`Message: ${error.message}`);
+    console.error(`Context: ${error.data?.context}`);
+    
+    // Handle specific errors
+    switch (error.code) {
+      case ERROR_CODES.INSUFFICIENT_BALANCE:
+        showInsufficientBalanceUI();
+        break;
+      case ERROR_CODES.USER_DENIED_INTENT:
+        // User cancelled - not an error to display
+        break;
+      default:
+        showGenericError(error.message);
+    }
+  }
+}
+```
+
+## Error Categories
+
+### User Actions
+
+Errors triggered by user decisions or cancellations.
+
+<AccordionGroup>
+  <Accordion title="USER_DENIED_INTENT" icon="hand">
+    **Description**: User rejected the intent in the intent hook.
+    
+    **When it occurs**: When `deny()` is called in `setOnIntentHook()`
+    
+    **User action**: None - user intentionally cancelled the operation
+    
+    **Example**:
+    ```typescript
+    sdk.setOnIntentHook(({ allow, deny }) => {
+      if (!userConfirms()) {
+        deny(); // Throws USER_DENIED_INTENT
+      }
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="USER_DENIED_ALLOWANCE" icon="hand">
+    **Description**: User rejected the token approval request.
+    
+    **When it occurs**: When `deny()` is called in `setOnAllowanceHook()`
+    
+    **User action**: None - user intentionally cancelled
+    
+    **Example**:
+    ```typescript
+    sdk.setOnAllowanceHook(({ allow, deny }) => {
+      if (!userApproves()) {
+        deny(); // Throws USER_DENIED_ALLOWANCE
+      }
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="USER_DENIED_INTENT_SIGNATURE" icon="signature">
+    **Description**: User rejected the signature request for the intent.
+    
+    **When it occurs**: When user declines to sign in their wallet
+    
+    **User action**: None - user cancelled signature
+    
+    **Recovery**: User can retry the operation
+  </Accordion>
+
+  <Accordion title="USER_DENIED_SIWE_SIGNATURE" icon="signature">
+    **Description**: User rejected the Sign-In with Ethereum (SIWE) signature.
+    
+    **When it occurs**: During initial authentication
+    
+    **User action**: None - user cancelled authentication
+    
+    **Recovery**: Retry authentication when ready
+  </Accordion>
+</AccordionGroup>
+
+### Balance & Funds
+
+Errors related to insufficient balances or fund availability.
+
+<AccordionGroup>
+  <Accordion title="INSUFFICIENT_BALANCE" icon="wallet">
+    **Description**: Not enough tokens available for the operation.
+    
+    **When it occurs**: When attempting to bridge or transfer more than available balance
+    
+    **User action**: 
+    - Check available balance with `getBalancesForBridge()`
+    - Deposit more funds
+    - Reduce the amount
+    
+    **Example**:
+    ```typescript
+    // Check max before bridging
+    const max = await sdk.calculateMaxForBridge({
+      token: 'USDC',
+      toChainId: 137,
+    });
+    console.log(`Max available: ${max.amount} USDC`);
+    ```
+  </Accordion>
+
+  <Accordion title="NO_BALANCE_FOR_ADDRESS" icon="circle-xmark">
+    **Description**: No balance found for the specified address.
+    
+    **When it occurs**: When querying balances for an address with no tokens
+    
+    **User action**: Verify the address is correct and has been funded
+    
+    **Recovery**: Fund the address or check a different address
+  </Accordion>
+</AccordionGroup>
+
+### Validation Errors
+
+Errors from invalid input parameters or configuration.
+
+<AccordionGroup>
+  <Accordion title="INVALID_INPUT" icon="circle-exclamation">
+    **Description**: Invalid parameters provided to SDK method.
+    
+    **When it occurs**: When parameters don't meet validation requirements
+    
+    **User action**: Check parameter types and values
+    
+    **Common causes**:
+    - Negative amounts
+    - Invalid chain IDs
+    - Malformed addresses
+  </Accordion>
+
+  <Accordion title="INVALID_ADDRESS_LENGTH" icon="ruler">
+    **Description**: Address has incorrect length (not 42 characters for Ethereum addresses).
+    
+    **When it occurs**: When providing malformed Ethereum addresses
+    
+    **User action**: Verify address format (should start with `0x` and be 42 characters)
+    
+    **Example**: `0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45` (correct)
+  </Accordion>
+
+  <Accordion title="INVALID_VALUES_ALLOWANCE_HOOK" icon="ban">
+    **Description**: Invalid values passed to `allow()` in allowance hook.
+    
+    **When it occurs**: When allowance hook receives invalid approval amounts
+    
+    **User action**: Use valid values: `'min'`, `'max'`, or a `bigint` amount
+    
+    **Example**:
+    ```typescript
+    sdk.setOnAllowanceHook(({ allow }) => {
+      allow(['min']); // ✅ Correct
+      allow(['invalid']); // ❌ Throws INVALID_VALUES_ALLOWANCE_HOOK
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="TOKEN_NOT_SUPPORTED" icon="coins">
+    **Description**: The specified token is not supported by the SDK.
+    
+    **When it occurs**: When requesting operations with unsupported tokens
+    
+    **User action**: Use supported tokens (ETH, USDC, USDT, USDM)
+    
+    **Recovery**: Check [Supported Tokens](/resources/supported-tokens) reference
+  </Accordion>
+</AccordionGroup>
+
+### Initialization Errors
+
+Errors related to SDK initialization and setup.
+
+<AccordionGroup>
+  <Accordion title="SDK_NOT_INITIALIZED" icon="circle-play">
+    **Description**: SDK method called before initialization.
+    
+    **When it occurs**: When calling SDK methods before `initialize()` completes
+    
+    **User action**: Call `initialize()` before using SDK methods
+    
+    **Example**:
+    ```typescript
+    const sdk = new NexusSDK({ network: 'mainnet' });
+    await sdk.initialize(window.ethereum); // Required!
+    await sdk.getBalancesForBridge(); // Now safe to call
+    ```
+  </Accordion>
+
+  <Accordion title="SDK_INIT_STATE_NOT_EXPECTED" icon="exclamation">
+    **Description**: SDK in unexpected initialization state.
+    
+    **When it occurs**: Internal state management error
+    
+    **User action**: Re-initialize the SDK
+    
+    **Recovery**: Create a new SDK instance
+  </Accordion>
+
+  <Accordion title="WALLET_NOT_CONNECTED" icon="wallet">
+    **Description**: No wallet connected to the SDK.
+    
+    **When it occurs**: When provider is not set or wallet not connected
+    
+    **User action**: Connect wallet before SDK operations
+    
+    **Example**:
+    ```typescript
+    await sdk.initialize(window.ethereum);
+    ```
+  </Accordion>
+
+  <Accordion title="CONNECT_ACCOUNT_FAILED" icon="plug">
+    **Description**: Failed to connect to wallet account.
+    
+    **When it occurs**: When wallet connection fails
+    
+    **User action**: 
+    - Check wallet is unlocked
+    - Grant connection permission
+    - Retry connection
+  </Accordion>
+</AccordionGroup>
+
+### Chain & Network Errors
+
+Errors related to blockchain networks and configuration.
+
+<AccordionGroup>
+  <Accordion title="CHAIN_NOT_FOUND" icon="link-slash">
+    **Description**: Specified chain ID not found in supported chains.
+    
+    **When it occurs**: When using unsupported chain IDs
+    
+    **User action**: Use supported chain IDs
+    
+    **Recovery**: Check [Supported Networks](/resources/supported-networks) reference
+  </Accordion>
+
+  <Accordion title="CHAIN_DATA_NOT_FOUND" icon="database">
+    **Description**: Chain data unavailable (RPC or configuration issue).
+    
+    **When it occurs**: Network connectivity issues or chain configuration errors
+    
+    **User action**: 
+    - Check internet connection
+    - Verify RPC endpoints are accessible
+    - Retry after a moment
+  </Accordion>
+
+  <Accordion title="VAULT_CONTRACT_NOT_FOUND" icon="vault">
+    **Description**: Vault contract not found for the specified chain.
+    
+    **When it occurs**: Internal configuration error
+    
+    **User action**: Contact support - this indicates a configuration issue
+  </Accordion>
+
+  <Accordion title="ENVIRONMENT_NOT_SUPPORTED" icon="globe">
+    **Description**: Specified environment is not supported.
+    
+    **When it occurs**: When using invalid network configuration
+    
+    **User action**: Use `'mainnet'` or `'testnet'` for network parameter
+  </Accordion>
+
+  <Accordion title="ENVIRONMENT_NOT_KNOWN" icon="question">
+    **Description**: Unknown environment configuration.
+    
+    **When it occurs**: Internal configuration error
+    
+    **User action**: Verify SDK initialization parameters
+  </Accordion>
+
+  <Accordion title="UNIVERSE_NOT_SUPPORTED" icon="planet">
+    **Description**: Blockchain universe not supported (e.g., non-EVM chains).
+    
+    **When it occurs**: When attempting unsupported blockchain types
+    
+    **User action**: SDK currently supports EVM-compatible chains only
+  </Accordion>
+</AccordionGroup>
+
+### Transaction Errors
+
+Errors during transaction execution.
+
+<AccordionGroup>
+  <Accordion title="TRANSACTION_TIMEOUT" icon="clock">
+    **Description**: Transaction did not confirm within timeout period.
+    
+    **When it occurs**: When transaction takes too long to mine
+    
+    **User action**: 
+    - Check transaction on block explorer
+    - Retry with higher gas price
+    - Wait for network congestion to clear
+    
+    **Recovery**: Transaction may still succeed - verify on explorer
+  </Accordion>
+
+  <Accordion title="TRANSACTION_REVERTED" icon="rotate-left">
+    **Description**: Transaction reverted on-chain.
+    
+    **When it occurs**: Smart contract execution failed
+    
+    **User action**: 
+    - Verify contract parameters
+    - Check token allowances
+    - Review transaction data
+    
+    **Common causes**: Insufficient allowance, slippage, contract conditions not met
+  </Accordion>
+
+  <Accordion title="TRANSACTION_CHECK_ERROR" icon="magnifying-glass">
+    **Description**: Error checking transaction status.
+    
+    **When it occurs**: RPC or network issues when querying transaction
+    
+    **User action**: Retry the status check
+    
+    **Recovery**: Check transaction manually on block explorer
+  </Accordion>
+
+  <Accordion title="FETCH_GAS_PRICE_FAILED" icon="gas-pump">
+    **Description**: Failed to fetch current gas price.
+    
+    **When it occurs**: RPC error when querying gas prices
+    
+    **User action**: 
+    - Check network connection
+    - Retry operation
+    - Specify gas price manually if supported
+  </Accordion>
+</AccordionGroup>
+
+### Operation Errors
+
+Errors during specific SDK operations.
+
+<AccordionGroup>
+  <Accordion title="SIMULATION_FAILED" icon="flask">
+    **Description**: Transaction simulation failed.
+    
+    **When it occurs**: When `simulate*()` methods encounter errors
+    
+    **User action**: 
+    - Verify parameters are correct
+    - Check sufficient balance including gas
+    - Review token approvals
+  </Accordion>
+
+  <Accordion title="QUOTE_FAILED" icon="quote-right">
+    **Description**: Failed to get swap quote.
+    
+    **When it occurs**: Swap quote request failed
+    
+    **User action**: 
+    - Retry request
+    - Check token pair is supported
+    - Verify amounts are within limits
+  </Accordion>
+
+  <Accordion title="SWAP_FAILED" icon="repeat">
+    **Description**: Swap operation failed.
+    
+    **When it occurs**: During swap execution
+    
+    **User action**: 
+    - Check error details in `error.data`
+    - Verify token balances
+    - Retry operation
+  </Accordion>
+
+  <Accordion title="REFUND_FAILED" icon="money-bill-transfer">
+    **Description**: Refund request failed.
+    
+    **When it occurs**: When `refundIntent()` fails
+    
+    **User action**: Contact support with intent ID and error details
+  </Accordion>
+
+  <Accordion title="REFUND_CHECK_ERROR" icon="search-dollar">
+    **Description**: Error checking refund status.
+    
+    **When it occurs**: Network error when querying refund
+    
+    **User action**: Retry status check
+  </Accordion>
+</AccordionGroup>
+
+### Intent & Solver Errors
+
+Errors related to intent processing and solver network.
+
+<AccordionGroup>
+  <Accordion title="LIQUIDITY_TIMEOUT" icon="hourglass">
+    **Description**: Solver liquidity timeout - no solver accepted the intent.
+    
+    **When it occurs**: When no solver can fulfill the intent within timeout
+    
+    **User action**: 
+    - Retry after a few minutes
+    - Reduce transfer amount
+    - Try different source chains
+    
+    **Note**: This may indicate temporary liquidity constraints
+  </Accordion>
+
+  <Accordion title="RATES_CHANGED_BEYOND_TOLERANCE" icon="chart-line">
+    **Description**: Token price moved too much since quote.
+    
+    **When it occurs**: Significant price movement during operation
+    
+    **User action**: 
+    - Refresh intent/quote
+    - Retry operation
+    - Accept new rates
+  </Accordion>
+
+  <Accordion title="RFF_FEE_EXPIRED" icon="timer">
+    **Description**: Request for funds (RFF) fee quote expired.
+    
+    **When it occurs**: Quote expired before execution
+    
+    **User action**: Retry operation to get fresh quote
+  </Accordion>
+
+  <Accordion title="DESTINATION_REQUEST_HASH_NOT_FOUND" icon="hashtag">
+    **Description**: Destination request hash not found.
+    
+    **When it occurs**: Internal tracking error
+    
+    **User action**: Contact support with operation details
+  </Accordion>
+
+  <Accordion title="DESTINATION_SWEEP_ERROR" icon="broom">
+    **Description**: Error sweeping funds on destination chain.
+    
+    **When it occurs**: Final fund collection failed
+    
+    **User action**: Contact support - funds may need manual recovery
+  </Accordion>
+</AccordionGroup>
+
+### Allowance Errors
+
+Errors related to token approvals and allowances.
+
+<AccordionGroup>
+  <Accordion title="SLIPPAGE_EXCEEDED_ALLOWANCE" icon="percent">
+    **Description**: Slippage exceeded during allowance check.
+    
+    **When it occurs**: Price moved beyond acceptable slippage
+    
+    **User action**: 
+    - Increase allowance amount
+    - Approve with `'max'` instead of `'min'`
+    - Retry operation
+    
+    **Example**:
+    ```typescript
+    sdk.setOnAllowanceHook(({ allow }) => {
+      allow(['max']); // Approve unlimited to avoid slippage issues
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="ALLOWANCE_SETTING_ERROR" icon="key">
+    **Description**: Error setting token allowance.
+    
+    **When it occurs**: Approval transaction failed
+    
+    **User action**: 
+    - Retry approval
+    - Check gas balance
+    - Verify wallet connection
+  </Accordion>
+</AccordionGroup>
+
+### Other Errors
+
+<AccordionGroup>
+  <Accordion title="INTERNAL_ERROR" icon="bug">
+    **Description**: Internal SDK error.
+    
+    **When it occurs**: Unexpected internal state
+    
+    **User action**: 
+    - Report to support with full error details
+    - Include `error.data` and `error.stack`
+    - Provide reproduction steps
+  </Accordion>
+
+  <Accordion title="UNKNOWN_SIGNATURE" icon="signature">
+    **Description**: Unknown signature type encountered.
+    
+    **When it occurs**: Unexpected signature format
+    
+    **User action**: Contact support - this indicates an integration issue
+  </Accordion>
+
+  <Accordion title="ASSET_NOT_FOUND" icon="magnifying-glass-dollar">
+    **Description**: Requested asset not found in configuration.
+    
+    **When it occurs**: When querying unsupported asset
+    
+    **User action**: Verify asset/token symbol or address
+  </Accordion>
+
+  <Accordion title="COSMOS_ERROR" icon="atom">
+    **Description**: Cosmos chain-specific error.
+    
+    **When it occurs**: Operations involving Cosmos chains
+    
+    **User action**: Check Cosmos configuration and network status
+  </Accordion>
+
+  <Accordion title="FEE_GRANT_REQUESTED" icon="gift">
+    **Description**: Fee grant was requested (Cosmos chains).
+    
+    **When it occurs**: Fee grant mechanism triggered
+    
+    **User action**: Contact support for fee grant setup
+  </Accordion>
+</AccordionGroup>
+
+## Complete Error Codes List
+
+```typescript
+export const ERROR_CODES = {
+  // User Actions
+  USER_DENIED_INTENT: 'USER_DENIED_INTENT',
+  USER_DENIED_ALLOWANCE: 'USER_DENIED_ALLOWANCE',
+  USER_DENIED_INTENT_SIGNATURE: 'USER_DENIED_INTENT_SIGNATURE',
+  USER_DENIED_SIWE_SIGNATURE: 'USER_DENIED_SIWE_SIGNATURE',
+  
+  // Balance & Funds
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  NO_BALANCE_FOR_ADDRESS: 'NO_BALANCE_FOR_ADDRESS',
+  
+  // Validation
+  INVALID_INPUT: 'INVALID_INPUT',
+  INVALID_ADDRESS_LENGTH: 'INVALID_ADDRESS_LENGTH',
+  INVALID_VALUES_ALLOWANCE_HOOK: 'INVALID_VALUES_ALLOWANCE_HOOK',
+  TOKEN_NOT_SUPPORTED: 'TOKEN_NOT_SUPPORTED',
+  
+  // Initialization
+  SDK_NOT_INITIALIZED: 'SDK_NOT_INITIALIZED',
+  SDK_INIT_STATE_NOT_EXPECTED: 'SDK_INIT_STATE_NOT_EXPECTED',
+  WALLET_NOT_CONNECTED: 'WALLET_NOT_CONNECTED',
+  CONNECT_ACCOUNT_FAILED: 'CONNECT_ACCOUNT_FAILED',
+  
+  // Chain & Network
+  CHAIN_NOT_FOUND: 'CHAIN_NOT_FOUND',
+  CHAIN_DATA_NOT_FOUND: 'CHAIN_DATA_NOT_FOUND',
+  VAULT_CONTRACT_NOT_FOUND: 'VAULT_CONTRACT_NOT_FOUND',
+  ENVIRONMENT_NOT_SUPPORTED: 'ENVIRONMENT_NOT_SUPPORTED',
+  ENVIRONMENT_NOT_KNOWN: 'ENVIRONMENT_NOT_KNOWN',
+  UNIVERSE_NOT_SUPPORTED: 'UNIVERSE_NOT_SUPPORTED',
+  
+  // Transactions
+  TRANSACTION_TIMEOUT: 'TRANSACTION_TIMEOUT',
+  TRANSACTION_REVERTED: 'TRANSACTION_REVERTED',
+  TRANSACTION_CHECK_ERROR: 'TRANSACTION_CHECK_ERROR',
+  FETCH_GAS_PRICE_FAILED: 'FETCH_GAS_PRICE_FAILED',
+  
+  // Operations
+  SIMULATION_FAILED: 'SIMULATION_FAILED',
+  QUOTE_FAILED: 'QUOTE_FAILED',
+  SWAP_FAILED: 'SWAP_FAILED',
+  REFUND_FAILED: 'REFUND_FAILED',
+  REFUND_CHECK_ERROR: 'REFUND_CHECK_ERROR',
+  
+  // Intent & Solver
+  LIQUIDITY_TIMEOUT: 'LIQUIDITY_TIMEOUT',
+  RATES_CHANGED_BEYOND_TOLERANCE: 'RATES_CHANGED_BEYOND_TOLERANCE',
+  RFF_FEE_EXPIRED: 'RFF_FEE_EXPIRED',
+  DESTINATION_REQUEST_HASH_NOT_FOUND: 'DESTINATION_REQUEST_HASH_NOT_FOUND',
+  DESTINATION_SWEEP_ERROR: 'DESTINATION_SWEEP_ERROR',
+  
+  // Allowance
+  SLIPPAGE_EXCEEDED_ALLOWANCE: 'SLIPPAGE_EXCEEDED_ALLOWANCE',
+  ALLOWANCE_SETTING_ERROR: 'ALLOWANCE_SETTING_ERROR',
+  
+  // Other
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+  UNKNOWN_SIGNATURE: 'UNKNOWN_SIGNATURE',
+  ASSET_NOT_FOUND: 'ASSET_NOT_FOUND',
+  COSMOS_ERROR: 'COSMOS_ERROR',
+} as const;
+```
+
+## Best Practices
+
+1. **Always check error types**:
+   ```typescript
+   if (error instanceof NexusError) {
+     // Handle NexusError
+   } else {
+     // Handle unexpected errors
+   }
+   ```
+
+2. **Log error details for debugging**:
+   ```typescript
+   console.error('NexusError:', error.toJSON());
+   ```
+
+3. **Handle user cancellations gracefully**:
+   ```typescript
+   if (error.code === ERROR_CODES.USER_DENIED_INTENT) {
+     // Don't show error - user intentionally cancelled
+     return;
+   }
+   ```
+
+4. **Provide contextual recovery actions**:
+   ```typescript
+   switch (error.code) {
+     case ERROR_CODES.INSUFFICIENT_BALANCE:
+       showDepositUI();
+       break;
+     case ERROR_CODES.TRANSACTION_TIMEOUT:
+       showTransactionStatusChecker(txHash);
+       break;
+   }
+   ```

@@ -1,0 +1,821 @@
+---
+title: "Events"
+description: "Track cross-chain operation progress with real-time events"
+---
+
+## Overview
+
+The Avail Nexus SDK emits real-time events during operations, enabling you to build responsive UIs with progress tracking, status updates, and detailed step-by-step feedback.
+
+## Event System
+
+Events are emitted via the `onEvent` callback parameter available in most SDK methods:
+
+```typescript
+await sdk.bridge(params, {
+  onEvent: (event) => {
+    console.log('Event:', event.name);
+    console.log('Data:', event.args);
+  },
+});
+```
+
+## Event Constants
+
+The SDK provides event name constants to prevent typos:
+
+```typescript
+import { NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+const events = {
+  STEPS_LIST: 'STEPS_LIST',           // All steps for the operation
+  STEP_COMPLETE: 'STEP_COMPLETE',     // A step completed (bridge/execute)
+  SWAP_STEP_COMPLETE: 'SWAP_STEP_COMPLETE', // A swap step completed
+};
+```
+
+## Core Events
+
+### STEPS_LIST
+
+Emitted once at the start of an operation with all expected steps.
+
+```typescript
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+      const steps = event.args; // BridgeStepType[]
+      console.log(`Operation has ${steps.length} steps`);
+      initializeProgressBar(steps);
+    }
+  },
+});
+```
+
+**Event Structure:**
+```typescript
+{
+  name: 'STEPS_LIST',
+  args: BridgeStepType[] | SwapStepType[]
+}
+```
+
+### STEP_COMPLETE
+
+Emitted each time a step completes during bridge, transfer, or execute operations.
+
+```typescript
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      const step = event.args; // BridgeStepType
+      console.log(`Completed: ${step.type}`);
+      updateProgressBar(step);
+    }
+  },
+});
+```
+
+**Event Structure:**
+```typescript
+{
+  name: 'STEP_COMPLETE',
+  args: BridgeStepType
+}
+```
+
+### SWAP_STEP_COMPLETE
+
+Emitted each time a step completes during swap operations.
+
+```typescript
+sdk.swapWithExactIn(input, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      const step = event.args; // SwapStepType
+      console.log(`Swap step: ${step.type}`);
+      updateSwapProgress(step);
+    }
+  },
+});
+```
+
+**Event Structure:**
+```typescript
+{
+  name: 'SWAP_STEP_COMPLETE',
+  args: SwapStepType
+}
+```
+
+## Bridge Steps
+
+Bridge operations emit the following step types:
+
+```typescript
+import { BRIDGE_STEPS } from '@avail-project/nexus-core';
+```
+
+### Step Types Reference
+
+<AccordionGroup>
+  <Accordion title="INTENT_ACCEPTED">
+    Intent created and accepted by solver.
+
+    ```typescript
+    {
+      type: 'INTENT_ACCEPTED',
+      typeID: 'IA'
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="INTENT_HASH_SIGNED">
+    User signed the intent hash with their wallet.
+
+    ```typescript
+    {
+      type: 'INTENT_HASH_SIGNED',
+      typeID: 'IHS'
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="INTENT_SUBMITTED">
+    Intent submitted to the network with explorer URL.
+
+    ```typescript
+    {
+      type: 'INTENT_SUBMITTED',
+      typeID: 'IS',
+      data: {
+        explorerURL: string,
+        intentID: number
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="INTENT_FULFILLED">
+    Intent fulfilled by solver on destination chain.
+
+    ```typescript
+    {
+      type: 'INTENT_FULFILLED',
+      typeID: 'IF'
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="ALLOWANCE_USER_APPROVAL">
+    Waiting for user to approve token allowance.
+
+    ```typescript
+    {
+      type: 'ALLOWANCE_USER_APPROVAL',
+      typeID: 'AUA_{chainId}',
+      data: {
+        chainID: number,
+        chainName: string
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="ALLOWANCE_APPROVAL_MINED">
+    Allowance approval transaction confirmed on chain.
+
+    ```typescript
+    {
+      type: 'ALLOWANCE_APPROVAL_MINED',
+      typeID: 'AAM_{chainId}',
+      data: {
+        chainID: number,
+        chainName: string
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="ALLOWANCE_ALL_DONE">
+    All required allowances approved.
+
+    ```typescript
+    {
+      type: 'ALLOWANCE_ALL_DONE',
+      typeID: 'AAD'
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="INTENT_DEPOSIT">
+    Deposit initiated on a source chain.
+
+    ```typescript
+    {
+      type: 'INTENT_DEPOSIT',
+      typeID: 'ID_{index}',
+      data: {
+        amount: string,
+        chainID: number,
+        chainName: string
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="INTENT_DEPOSITS_CONFIRMED">
+    All deposits confirmed on source chains.
+
+    ```typescript
+    {
+      type: 'INTENT_DEPOSITS_CONFIRMED',
+      typeID: 'UIDC'
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="INTENT_COLLECTION">
+    Collecting funds from a source chain.
+
+    ```typescript
+    {
+      type: 'INTENT_COLLECTION',
+      typeID: 'IC_{index}',
+      data: {
+        confirmed: number,
+        total: number,
+        txHash?: Hex,
+        explorerUrl?: string
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="INTENT_COLLECTION_COMPLETE">
+    All funds collected from source chains.
+
+    ```typescript
+    {
+      type: 'INTENT_COLLECTION_COMPLETE',
+      typeID: 'ICC'
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="APPROVAL">
+    Token approval for contract execution.
+
+    ```typescript
+    {
+      type: 'APPROVAL',
+      typeID: 'AP'
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="TRANSACTION_SENT">
+    Execute transaction sent to network.
+
+    ```typescript
+    {
+      type: 'TRANSACTION_SENT',
+      typeID: 'TS'
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="TRANSACTION_CONFIRMED">
+    Execute transaction confirmed on chain.
+
+    ```typescript
+    {
+      type: 'TRANSACTION_CONFIRMED',
+      typeID: 'CN'
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Bridge Step TypeScript Type
+
+```typescript
+type BridgeStepType =
+  | ReturnType<typeof BRIDGE_STEPS.ALLOWANCE_APPROVAL_REQUEST>
+  | ReturnType<typeof BRIDGE_STEPS.ALLOWANCE_APPROVAL_MINED>
+  | ReturnType<typeof BRIDGE_STEPS.INTENT_DEPOSIT_REQUEST>
+  | ReturnType<typeof BRIDGE_STEPS.INTENT_SUBMITTED>
+  | ReturnType<typeof BRIDGE_STEPS.INTENT_COLLECTION>
+  | typeof BRIDGE_STEPS.INTENT_ACCEPTED
+  | typeof BRIDGE_STEPS.INTENT_HASH_SIGNED
+  | typeof BRIDGE_STEPS.INTENT_DEPOSITS_CONFIRMED
+  | typeof BRIDGE_STEPS.INTENT_COLLECTION_COMPLETE
+  | typeof BRIDGE_STEPS.INTENT_FULFILLED
+  | typeof BRIDGE_STEPS.ALLOWANCE_COMPLETE
+  | typeof BRIDGE_STEPS.EXECUTE_APPROVAL_STEP
+  | typeof BRIDGE_STEPS.EXECUTE_TRANSACTION_CONFIRMED
+  | typeof BRIDGE_STEPS.EXECUTE_TRANSACTION_SENT;
+```
+
+## Swap Steps
+
+Swap operations emit the following step types:
+
+```typescript
+import { SWAP_STEPS } from '@avail-project/nexus-core';
+```
+
+### Swap Step Types Reference
+
+<AccordionGroup>
+  <Accordion title="SWAP_START">
+    Swap operation started.
+
+    ```typescript
+    {
+      type: 'SWAP_START',
+      typeID: 'SWAP_START',
+      completed: true
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="DETERMINING_SWAP">
+    Calculating optimal swap route.
+
+    ```typescript
+    {
+      type: 'DETERMINING_SWAP',
+      typeID: 'DETERMINING_SWAP',
+      completed: boolean
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="CREATE_PERMIT_EOA_TO_EPHEMERAL">
+    Creating permit for ephemeral wallet.
+
+    ```typescript
+    {
+      type: 'CREATE_PERMIT_EOA_TO_EPHEMERAL',
+      typeID: 'CREATE_PERMIT_EOA_TO_EPHEMERAL_{chainId}_{symbol}',
+      completed: boolean,
+      symbol: string,
+      chain: { id: number, name: string }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="CREATE_PERMIT_FOR_SOURCE_SWAP">
+    Creating permit for source swap.
+
+    ```typescript
+    {
+      type: 'CREATE_PERMIT_FOR_SOURCE_SWAP',
+      typeID: 'CREATE_PERMIT_FOR_SOURCE_SWAP_{chainId}_{symbol}',
+      completed: boolean,
+      symbol: string,
+      chain: { id: number, name: string }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="SOURCE_SWAP_BATCH_TX">
+    Executing source chain swaps in batch.
+
+    ```typescript
+    {
+      type: 'SOURCE_SWAP_BATCH_TX',
+      typeID: 'SOURCE_SWAP_BATCH_TX',
+      completed: boolean
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="SOURCE_SWAP_HASH">
+    Source swap transaction hash received.
+
+    ```typescript
+    {
+      type: 'SOURCE_SWAP_HASH',
+      typeID: 'SOURCE_SWAP_HASH_{chainId}',
+      completed: true,
+      chain: { id: number, name: string },
+      explorerURL: string
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="BRIDGE_DEPOSIT">
+    Bridge deposit for cross-chain swap.
+
+    ```typescript
+    {
+      type: 'BRIDGE_DEPOSIT',
+      typeID: 'BRIDGE_DEPOSIT_{chainId}',
+      data: {
+        chain: { id: number, name: string },
+        hash: Hex,
+        explorerURL: string
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="RFF_ID">
+    Request for funds ID assigned.
+
+    ```typescript
+    {
+      type: 'RFF_ID',
+      typeID: 'RFF_ID',
+      completed: true,
+      data: number
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="DESTINATION_SWAP_BATCH_TX">
+    Executing destination chain swaps.
+
+    ```typescript
+    {
+      type: 'DESTINATION_SWAP_BATCH_TX',
+      typeID: 'DESTINATION_SWAP_BATCH_TX',
+      completed: boolean
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="DESTINATION_SWAP_HASH">
+    Destination swap transaction hash received.
+
+    ```typescript
+    {
+      type: 'DESTINATION_SWAP_HASH',
+      typeID: 'DESTINATION_SWAP_HASH_{chainId}',
+      completed: true,
+      chain: { id: number, name: string },
+      explorerURL: string
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="SWAP_COMPLETE">
+    Swap completed successfully.
+
+    ```typescript
+    {
+      type: 'SWAP_COMPLETE',
+      typeID: 'SWAP_COMPLETE',
+      completed: true
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="SWAP_SKIPPED">
+    Swap skipped (sufficient balance exists).
+
+    ```typescript
+    {
+      type: 'SWAP_SKIPPED',
+      typeID: 'SWAP_SKIPPED',
+      completed: true,
+      data: {
+        destination: {
+          amount: string,
+          chain: { id: number, name: string },
+          token: { contractAddress: Hex, decimals: number, symbol: string }
+        },
+        input: {
+          amount: string,
+          token: { contractAddress: Hex, decimals: number, symbol: string }
+        },
+        gas: {
+          required: string,
+          price: string,
+          estimatedFee: string
+        }
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Swap Step TypeScript Type
+
+```typescript
+type SwapStepType =
+  | ReturnType<typeof SWAP_STEPS.CREATE_PERMIT_EOA_TO_EPHEMERAL>
+  | ReturnType<typeof SWAP_STEPS.CREATE_PERMIT_FOR_SOURCE_SWAP>
+  | ReturnType<typeof SWAP_STEPS.DESTINATION_SWAP_BATCH_TX>
+  | ReturnType<typeof SWAP_STEPS.DESTINATION_SWAP_HASH>
+  | ReturnType<typeof SWAP_STEPS.DETERMINING_SWAP>
+  | ReturnType<typeof SWAP_STEPS.RFF_ID>
+  | ReturnType<typeof SWAP_STEPS.SOURCE_SWAP_BATCH_TX>
+  | ReturnType<typeof SWAP_STEPS.SOURCE_SWAP_HASH>
+  | ReturnType<typeof SWAP_STEPS.BRIDGE_DEPOSIT>
+  | ReturnType<typeof SWAP_STEPS.SWAP_SKIPPED>
+  | typeof SWAP_STEPS.SWAP_COMPLETE
+  | typeof SWAP_STEPS.SWAP_START;
+```
+
+## Building Progress UIs
+
+### Basic Progress Tracker
+
+```typescript
+import { NEXUS_EVENTS, type BridgeStepType } from '@avail-project/nexus-core';
+
+let steps: BridgeStepType[] = [];
+let completedSteps: Set<string> = new Set();
+
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+      // Initialize with all expected steps
+      steps = event.args;
+      console.log(`Total steps: ${steps.length}`);
+      renderProgress();
+    }
+
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      // Mark step as complete
+      const step = event.args;
+      completedSteps.add(step.typeID);
+      console.log(`Completed: ${step.type}`);
+      renderProgress();
+    }
+  },
+});
+
+function renderProgress() {
+  steps.forEach((step, index) => {
+    const isComplete = completedSteps.has(step.typeID);
+    const isCurrent = index === completedSteps.size;
+    const icon = isComplete ? '✓' : isCurrent ? '●' : '○';
+    console.log(`${icon} ${step.type}`);
+  });
+}
+```
+
+### React Progress Component
+
+```typescript
+import { useState } from 'react';
+import { NEXUS_EVENTS, type BridgeStepType } from '@avail-project/nexus-core';
+
+function BridgeProgress() {
+  const [steps, setSteps] = useState<BridgeStepType[]>([]);
+  const [completed, setCompleted] = useState<Set<string>>(new Set());
+
+  const handleBridge = async () => {
+    await sdk.bridge(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+          setSteps(event.args);
+        }
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          setCompleted(prev => new Set([...prev, event.args.typeID]));
+        }
+      },
+    });
+  };
+
+  return (
+    <div>
+      <h3>Bridge Progress</h3>
+      <div className="steps">
+        {steps.map((step, index) => {
+          const isComplete = completed.has(step.typeID);
+          const isCurrent = index === completed.size;
+          
+          return (
+            <div
+              key={step.typeID}
+              className={`step ${
+                isComplete ? 'complete' : isCurrent ? 'current' : 'pending'
+              }`}
+            >
+              <div className="step-icon">
+                {isComplete ? '✓' : isCurrent ? '●' : '○'}
+              </div>
+              <div className="step-label">{step.type}</div>
+              {step.data?.explorerURL && (
+                <a href={step.data.explorerURL} target="_blank">
+                  View Transaction
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {completed.size === steps.length && (
+        <div className="complete-message">Bridge Complete!</div>
+      )}
+    </div>
+  );
+}
+```
+
+### Percentage Progress
+
+```typescript
+function calculateProgress(steps: BridgeStepType[], completed: Set<string>) {
+  if (steps.length === 0) return 0;
+  const percentage = (completed.size / steps.length) * 100;
+  return Math.round(percentage);
+}
+
+// Usage
+const progress = calculateProgress(steps, completedSteps);
+console.log(`Progress: ${progress}%`);
+```
+
+### Explorer Link Extraction
+
+```typescript
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      const step = event.args;
+      
+      // Check for explorer URLs in different steps
+      if (step.type === 'INTENT_SUBMITTED') {
+        console.log('Intent Explorer:', step.data?.explorerURL);
+      }
+      
+      if (step.type === 'INTENT_COLLECTION') {
+        console.log('Collection TX:', step.data?.explorerUrl);
+      }
+    }
+  },
+});
+```
+
+## Event Handling Patterns
+
+### Switch Statement Pattern
+
+```typescript
+sdk.bridge(params, {
+  onEvent: (event) => {
+    switch (event.name) {
+      case NEXUS_EVENTS.STEPS_LIST:
+        initializeProgress(event.args);
+        break;
+        
+      case NEXUS_EVENTS.STEP_COMPLETE:
+        updateProgress(event.args);
+        
+        // Handle specific step types
+        if (event.args.type === 'INTENT_SUBMITTED') {
+          showIntentLink(event.args.data?.explorerURL);
+        }
+        break;
+        
+      case NEXUS_EVENTS.SWAP_STEP_COMPLETE:
+        updateSwapProgress(event.args);
+        break;
+    }
+  },
+});
+```
+
+### Event Aggregation Pattern
+
+```typescript
+class EventAggregator {
+  private listeners: Map<string, Function[]> = new Map();
+  
+  on(eventName: string, callback: Function) {
+    if (!this.listeners.has(eventName)) {
+      this.listeners.set(eventName, []);
+    }
+    this.listeners.get(eventName)!.push(callback);
+  }
+  
+  emit(event: { name: string; args: any }) {
+    const callbacks = this.listeners.get(event.name) || [];
+    callbacks.forEach(cb => cb(event.args));
+  }
+}
+
+const aggregator = new EventAggregator();
+
+// Register listeners
+aggregator.on(NEXUS_EVENTS.STEPS_LIST, (steps) => {
+  console.log('Steps:', steps);
+});
+
+aggregator.on(NEXUS_EVENTS.STEP_COMPLETE, (step) => {
+  console.log('Step complete:', step);
+});
+
+// Use with SDK
+sdk.bridge(params, {
+  onEvent: (event) => aggregator.emit(event),
+});
+```
+
+## Debugging with Events
+
+### Detailed Event Logger
+
+```typescript
+sdk.bridge(params, {
+  onEvent: (event) => {
+    console.group(`📡 Event: ${event.name}`);
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Args:', event.args);
+    
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      console.log('Step Type:', event.args.type);
+      console.log('Step ID:', event.args.typeID);
+      console.log('Data:', event.args.data);
+    }
+    
+    console.groupEnd();
+  },
+});
+```
+
+### Event History Tracking
+
+```typescript
+const eventHistory: Array<{ timestamp: number; event: any }> = [];
+
+sdk.bridge(params, {
+  onEvent: (event) => {
+    eventHistory.push({
+      timestamp: Date.now(),
+      event,
+    });
+    
+    // Export for debugging
+    localStorage.setItem('nexus-events', JSON.stringify(eventHistory));
+  },
+});
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Handle STEPS_LIST">
+    Initialize your UI with the complete list of steps:
+
+    ```typescript
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+        // Set up progress UI
+        initializeProgressBar(event.args);
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use TypeIDs for Tracking">
+    The `typeID` field uniquely identifies each step:
+
+    ```typescript
+    const completedSteps = new Set<string>();
+    
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      completedSteps.add(event.args.typeID);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Extract Explorer URLs">
+    Show users transaction links when available:
+
+    ```typescript
+    if (event.args.data?.explorerURL) {
+      showLink('View on Explorer', event.args.data.explorerURL);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Both Bridge and Swap Events">
+    Some operations emit both event types:
+
+    ```typescript
+    onEvent: (event) => {
+      switch (event.name) {
+        case NEXUS_EVENTS.STEP_COMPLETE:
+          // Bridge/execute steps
+          break;
+        case NEXUS_EVENTS.SWAP_STEP_COMPLETE:
+          // Swap steps
+          break;
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+- [Initialization](/concepts/initialization) - Set up the SDK
+- [Intents](/concepts/intents) - Understand the intent-based architecture
+- [Hooks](/concepts/hooks) - Implement user approval workflows

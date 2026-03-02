@@ -1,0 +1,602 @@
+---
+title: 'Bridge Operations'
+description: 'Bridge tokens across chains with auto-routing'
+---
+
+## bridge
+
+Bridge tokens from one or more source chains to a destination chain. The SDK automatically selects the most efficient source chains if not specified.
+
+```typescript
+await sdk.bridge(
+  params: BridgeParams,
+  options?: OnEventParam
+): Promise<BridgeResult>
+```
+
+### Parameters
+
+<ParamField path="params" type="BridgeParams" required>
+  Bridge operation parameters
+  
+  <Expandable title="properties">
+    <ParamField path="token" type="string" required>
+      Token symbol to bridge: `'ETH'`, `'USDC'`, `'USDT'`, or `'USDM'`
+    </ParamField>
+    
+    <ParamField path="amount" type="bigint" required>
+      Amount in smallest unit (e.g., 6 decimals for USDC: `100_000_000n` = 100 USDC)
+    </ParamField>
+    
+    <ParamField path="toChainId" type="number" required>
+      Destination chain ID (e.g., `1` for Ethereum, `137` for Polygon)
+    </ParamField>
+    
+    <ParamField path="recipient" type="Hex" optional>
+      Recipient address (defaults to connected wallet address)
+    </ParamField>
+    
+    <ParamField path="sourceChains" type="number[]" optional>
+      Specific source chain IDs to use (auto-selected if omitted for optimal routing)
+    </ParamField>
+    
+    <ParamField path="gas" type="bigint" optional>
+      Gas amount to supply on destination chain for recipient
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="OnEventParam" optional>
+  Event callbacks for tracking progress
+  
+  <Expandable title="properties">
+    <ParamField path="onEvent" type="(event: EventUnion) => void" optional>
+      Callback for step-by-step progress updates. See [Events & Steps](/api/events/bridge-steps)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="BridgeResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="explorerUrl" type="string">
+      Destination chain block explorer URL for tracking the intent
+    </ResponseField>
+    
+    <ResponseField name="sourceTxs" type="SourceTxs[]">
+      Array of source chain transactions
+      
+      <Expandable title="SourceTxs properties">
+        <ResponseField name="chain" type="object">
+          Source chain information
+          
+          <Expandable title="properties">
+            <ResponseField name="id" type="number">
+              Chain ID
+            </ResponseField>
+            <ResponseField name="name" type="string">
+              Chain name
+            </ResponseField>
+            <ResponseField name="logo" type="string">
+              Chain logo URL
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+        
+        <ResponseField name="hash" type="Hex">
+          Transaction hash
+        </ResponseField>
+        
+        <ResponseField name="explorerUrl" type="string">
+          Block explorer URL for this transaction
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="intent" type="ReadableIntent">
+      Complete intent details including sources, destination, and fees
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Basic Bridge
+const result = await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n, // 100 USDC (6 decimals)
+  toChainId: 137, // Polygon
+});
+
+console.log('Bridge complete!');
+console.log('Explorer URL:', result.explorerUrl);
+console.log('Source transactions:', result.sourceTxs);
+```
+
+```typescript With Progress Tracking
+import { NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+const result = await sdk.bridge(
+  {
+    token: 'USDC',
+    amount: 100_000_000n,
+    toChainId: 137,
+  },
+  {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+        console.log('Steps:', event.args);
+        initProgressBar(event.args);
+      }
+      
+      if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+        console.log('Step complete:', event.args.type);
+        updateProgressBar(event.args);
+      }
+    },
+  }
+);
+```
+
+```typescript Specific Source Chains
+// Bridge from Ethereum and Arbitrum only
+const result = await sdk.bridge({
+  token: 'USDC',
+  amount: 500_000_000n, // 500 USDC
+  toChainId: 8453, // Base
+  sourceChains: [1, 42161], // Ethereum + Arbitrum
+});
+```
+
+```typescript Bridge to Another Address
+const result = await sdk.bridge({
+  token: 'ETH',
+  amount: 1_000_000_000_000_000_000n, // 1 ETH
+  toChainId: 10, // Optimism
+  recipient: '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45',
+});
+```
+
+```typescript With Gas Supply
+// Bridge USDC and include gas for recipient
+const result = await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137,
+  gas: 100000n, // Supply 100k gas units
+});
+```
+</CodeGroup>
+
+### Error Handling
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  const result = await sdk.bridge({
+    token: 'USDC',
+    amount: 100_000_000n,
+    toChainId: 137,
+  });
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.INSUFFICIENT_BALANCE:
+        console.error('Insufficient balance for bridge');
+        // Show user their available balance
+        break;
+        
+      case ERROR_CODES.USER_DENIED_INTENT:
+        console.log('User cancelled bridge');
+        break;
+        
+      case ERROR_CODES.USER_DENIED_ALLOWANCE:
+        console.log('User denied token approval');
+        break;
+        
+      case ERROR_CODES.LIQUIDITY_TIMEOUT:
+        console.error('Solver liquidity timeout - try again later');
+        break;
+        
+      case ERROR_CODES.TRANSACTION_TIMEOUT:
+        console.error('Transaction timed out');
+        // Check explorer URL if available
+        break;
+        
+      default:
+        console.error('Bridge failed:', error.message);
+    }
+  }
+}
+```
+
+---
+
+## simulateBridge
+
+Simulate a bridge operation to preview fees, sources, and intent details without executing.
+
+```typescript
+await sdk.simulateBridge(
+  params: BridgeParams
+): Promise<SimulationResult>
+```
+
+### Parameters
+
+<ParamField path="params" type="BridgeParams" required>
+  Same parameters as `bridge()` method
+</ParamField>
+
+### Returns
+
+<ResponseField name="SimulationResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="intent" type="ReadableIntent">
+      Complete intent preview with sources, fees, and destination details
+    </ResponseField>
+    
+    <ResponseField name="token" type="TokenInfo">
+      Token information
+      
+      <Expandable title="properties">
+        <ResponseField name="contractAddress" type="Hex">
+          Token contract address
+        </ResponseField>
+        <ResponseField name="decimals" type="number">
+          Token decimals
+        </ResponseField>
+        <ResponseField name="logo" type="string">
+          Token logo URL
+        </ResponseField>
+        <ResponseField name="name" type="string">
+          Token name
+        </ResponseField>
+        <ResponseField name="symbol" type="string">
+          Token symbol
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Preview Fees
+const simulation = await sdk.simulateBridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137,
+});
+
+console.log('Preview:');
+console.log('Total fees:', simulation.intent.fees.total);
+console.log('Protocol fee:', simulation.intent.fees.protocol);
+console.log('Solver fee:', simulation.intent.fees.solver);
+console.log('Gas fee:', simulation.intent.fees.caGas);
+console.log('Sources:', simulation.intent.sources);
+```
+
+```typescript Show Confirmation UI
+const simulation = await sdk.simulateBridge({
+  token: 'ETH',
+  amount: 1_000_000_000_000_000_000n,
+  toChainId: 8453,
+});
+
+// Display in confirmation modal
+const modal = {
+  title: 'Confirm Bridge',
+  from: simulation.intent.sources.map(s => 
+    `${s.amount} ${s.token.symbol} from ${s.chain.name}`
+  ).join(', '),
+  to: `${simulation.intent.destination.amount} ${simulation.intent.token.symbol} on ${simulation.intent.destination.chainName}`,
+  fees: simulation.intent.fees.total,
+};
+
+showModal(modal);
+```
+
+```typescript Compare Routes
+// Simulate different source combinations
+const autoRoute = await sdk.simulateBridge({
+  token: 'USDC',
+  amount: 1000_000_000n,
+  toChainId: 137,
+});
+
+const manualRoute = await sdk.simulateBridge({
+  token: 'USDC',
+  amount: 1000_000_000n,
+  toChainId: 137,
+  sourceChains: [1], // Ethereum only
+});
+
+console.log('Auto-route fees:', autoRoute.intent.fees.total);
+console.log('Manual route fees:', manualRoute.intent.fees.total);
+```
+</CodeGroup>
+
+---
+
+## calculateMaxForBridge
+
+Calculate the maximum amount that can be bridged for a given token and destination.
+
+```typescript
+await sdk.calculateMaxForBridge(
+  params: Omit<BridgeParams, 'amount'>
+): Promise<BridgeMaxResult>
+```
+
+### Parameters
+
+<ParamField path="params" type="Omit<BridgeParams, 'amount'>" required>
+  Bridge parameters without the amount field
+  
+  <Expandable title="properties">
+    <ParamField path="token" type="string" required>
+      Token symbol
+    </ParamField>
+    
+    <ParamField path="toChainId" type="number" required>
+      Destination chain ID
+    </ParamField>
+    
+    <ParamField path="sourceChains" type="number[]" optional>
+      Specific source chains (auto-selected if omitted)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="BridgeMaxResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="amountRaw" type="bigint">
+      Maximum amount in smallest unit (raw bigint)
+    </ResponseField>
+    
+    <ResponseField name="amount" type="string">
+      Maximum amount (human-readable)
+    </ResponseField>
+    
+    <ResponseField name="symbol" type="string">
+      Token symbol
+    </ResponseField>
+    
+    <ResponseField name="sourceChainIds" type="number[]">
+      Chain IDs where funds will be sourced from
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Get Max Amount
+const max = await sdk.calculateMaxForBridge({
+  token: 'USDC',
+  toChainId: 137,
+});
+
+console.log(`Max bridgeable: ${max.amount} ${max.symbol}`);
+console.log(`From chains: ${max.sourceChainIds.join(', ')}`);
+console.log(`Raw amount: ${max.amountRaw}`);
+```
+
+```typescript "Max" Button
+// In a bridge form
+const handleMaxClick = async () => {
+  const max = await sdk.calculateMaxForBridge({
+    token: selectedToken,
+    toChainId: destinationChain,
+  });
+  
+  // Set form value
+  setAmount(max.amount);
+  setAmountRaw(max.amountRaw);
+  
+  // Update UI
+  document.getElementById('amount-input').value = max.amount;
+};
+```
+
+```typescript Validation
+async function validateBridgeAmount(
+  token: string,
+  amount: bigint,
+  toChainId: number
+): Promise<{ valid: boolean; error?: string }> {
+  const max = await sdk.calculateMaxForBridge({
+    token,
+    toChainId,
+  });
+  
+  if (amount > max.amountRaw) {
+    return {
+      valid: false,
+      error: `Maximum available: ${max.amount} ${max.symbol}`,
+    };
+  }
+  
+  return { valid: true };
+}
+```
+</CodeGroup>
+
+---
+
+## bridgeAndTransfer
+
+Bridge tokens and send to a specific recipient address (Attribution use case).
+
+```typescript
+await sdk.bridgeAndTransfer(
+  params: TransferParams,
+  options?: OnEventParam
+): Promise<TransferResult>
+```
+
+### Parameters
+
+<ParamField path="params" type="TransferParams" required>
+  Transfer operation parameters
+  
+  <Expandable title="properties">
+    <ParamField path="token" type="string" required>
+      Token symbol
+    </ParamField>
+    
+    <ParamField path="amount" type="bigint" required>
+      Amount in smallest unit
+    </ParamField>
+    
+    <ParamField path="toChainId" type="number" required>
+      Destination chain ID
+    </ParamField>
+    
+    <ParamField path="recipient" type="Hex" required>
+      Recipient address (different from sender)
+    </ParamField>
+    
+    <ParamField path="sourceChains" type="number[]" optional>
+      Specific source chains
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="OnEventParam" optional>
+  Event callbacks
+</ParamField>
+
+### Returns
+
+<ResponseField name="TransferResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="transactionHash" type="string">
+      Execute transaction hash on destination chain
+    </ResponseField>
+    
+    <ResponseField name="explorerUrl" type="string">
+      Block explorer URL for the execute transaction
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Basic Transfer
+const result = await sdk.bridgeAndTransfer({
+  token: 'USDC',
+  amount: 50_000_000n, // 50 USDC
+  toChainId: 42161, // Arbitrum
+  recipient: '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45',
+});
+
+console.log('Transfer complete!');
+console.log('Transaction:', result.transactionHash);
+console.log('Explorer:', result.explorerUrl);
+```
+
+```typescript Payment Flow
+// Payment use case
+async function sendPayment(
+  recipientAddress: string,
+  amountUSDC: number,
+  destinationChain: number
+) {
+  // Convert to bigint (USDC has 6 decimals)
+  const amount = BigInt(Math.floor(amountUSDC * 1_000_000));
+  
+  const result = await sdk.bridgeAndTransfer(
+    {
+      token: 'USDC',
+      amount,
+      toChainId: destinationChain,
+      recipient: recipientAddress as Hex,
+    },
+    {
+      onEvent: (event) => {
+        updatePaymentStatus(event);
+      },
+    }
+  );
+  
+  return result;
+}
+
+// Usage
+await sendPayment(
+  '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45',
+  100, // $100 USDC
+  137 // Polygon
+);
+```
+</CodeGroup>
+
+---
+
+## simulateBridgeAndTransfer
+
+Simulate a bridge-and-transfer operation.
+
+```typescript
+await sdk.simulateBridgeAndTransfer(
+  params: TransferParams
+): Promise<BridgeAndExecuteSimulationResult>
+```
+
+### Parameters
+
+<ParamField path="params" type="TransferParams" required>
+  Same parameters as `bridgeAndTransfer()`
+</ParamField>
+
+### Returns
+
+<ResponseField name="BridgeAndExecuteSimulationResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="bridgeSimulation" type="SimulationResult | null">
+      Bridge simulation (null if bridge not needed)
+    </ResponseField>
+    
+    <ResponseField name="executeSimulation" type="ExecuteSimulation">
+      Execute simulation with gas estimates
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```typescript
+const simulation = await sdk.simulateBridgeAndTransfer({
+  token: 'USDC',
+  amount: 50_000_000n,
+  toChainId: 42161,
+  recipient: '0x...',
+});
+
+if (simulation.bridgeSimulation) {
+  console.log('Bridge fees:', simulation.bridgeSimulation.intent.fees.total);
+}
+
+console.log('Execute gas:', simulation.executeSimulation.gasUsed);
+console.log('Execute fee:', simulation.executeSimulation.gasFee);
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Execute Operations" icon="play" href="/api/execute-operations">
+    Bridge and execute smart contracts
+  </Card>
+  <Card title="Events & Steps" icon="list-check" href="/api/events/bridge-steps">
+    Track bridge progress
+  </Card>
+</CardGroup>

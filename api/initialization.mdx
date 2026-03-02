@@ -1,0 +1,334 @@
+---
+title: 'Initialization & Lifecycle'
+description: 'Initialize and manage the SDK lifecycle'
+---
+
+## initialize
+
+Initialize the SDK with an EVM-compatible wallet provider.
+
+```typescript
+await sdk.initialize(provider: EthereumProvider): Promise<void>
+```
+
+<ParamField path="provider" type="EthereumProvider" required>
+  EIP-1193 compatible provider (e.g., MetaMask, WalletConnect, Coinbase Wallet)
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```typescript MetaMask
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+
+// Initialize with MetaMask
+await sdk.initialize(window.ethereum);
+```
+
+```typescript WalletConnect
+import { NexusSDK } from '@avail-project/nexus-core';
+import { EthereumProvider } from '@walletconnect/ethereum-provider';
+
+const provider = await EthereumProvider.init({
+  projectId: 'YOUR_PROJECT_ID',
+  chains: [1],
+  showQrModal: true,
+});
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(provider);
+```
+
+```typescript Coinbase Wallet
+import { NexusSDK } from '@avail-project/nexus-core';
+import CoinbaseWalletSDK from '@coinbase/wallet-sdk';
+
+const coinbaseWallet = new CoinbaseWalletSDK({
+  appName: 'My DApp',
+});
+
+const provider = coinbaseWallet.makeWeb3Provider();
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(provider);
+```
+</CodeGroup>
+
+### Error Handling
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.initialize(window.ethereum);
+  console.log('SDK initialized successfully');
+} catch (error) {
+  if (error instanceof NexusError) {
+    if (error.code === ERROR_CODES.WALLET_NOT_CONNECTED) {
+      // Prompt user to connect wallet
+      console.error('Please connect your wallet');
+    } else if (error.code === ERROR_CODES.CONNECT_ACCOUNT_FAILED) {
+      // Retry connection
+      console.error('Failed to connect account, please retry');
+    }
+  }
+}
+```
+
+---
+
+## setEVMProvider
+
+Set or update the EVM provider without full re-initialization. Useful for fetching balances before full initialization.
+
+```typescript
+await sdk.setEVMProvider(provider: EthereumProvider): Promise<void>
+```
+
+<ParamField path="provider" type="EthereumProvider" required>
+  EIP-1193 compatible provider
+</ParamField>
+
+### Example
+
+```typescript
+// Set provider before initialization to fetch balances
+await sdk.setEVMProvider(window.ethereum);
+const balances = await sdk.getBalancesForBridge();
+
+// Later, complete initialization for full functionality
+await sdk.initialize(window.ethereum);
+```
+
+---
+
+## isInitialized
+
+Check if the SDK is fully initialized and ready for operations.
+
+```typescript
+sdk.isInitialized(): boolean
+```
+
+### Returns
+
+<ResponseField name="initialized" type="boolean">
+  `true` if SDK is fully initialized, `false` otherwise
+</ResponseField>
+
+### Example
+
+```typescript
+if (sdk.isInitialized()) {
+  // Safe to call SDK methods
+  const result = await sdk.bridge({
+    token: 'USDC',
+    amount: 100_000_000n,
+    toChainId: 137,
+  });
+} else {
+  console.log('SDK not initialized yet');
+}
+```
+
+---
+
+## triggerAccountChange
+
+Manually trigger account change detection. Useful for providers that don't have event hooks like `.on(...)` and `.removeListener(...)`.
+
+```typescript
+sdk.triggerAccountChange(): void
+```
+
+<Note>
+This method does nothing if the address hasn't changed since the last check.
+</Note>
+
+### Example
+
+```typescript
+// Poll for account changes every 5 seconds
+setInterval(() => {
+  sdk.triggerAccountChange();
+}, 5000);
+```
+
+### Use Case
+
+Some wallet providers don't emit account change events. Use this method to manually check for changes:
+
+```typescript
+// For providers without event listeners
+const checkAccountChange = async () => {
+  const currentAccount = await provider.request({ 
+    method: 'eth_accounts' 
+  });
+  
+  if (currentAccount[0] !== lastKnownAccount) {
+    sdk.triggerAccountChange();
+    lastKnownAccount = currentAccount[0];
+  }
+};
+
+setInterval(checkAccountChange, 3000);
+```
+
+---
+
+## deinit
+
+Clean up SDK resources and track session analytics. Call this when unmounting your application or disconnecting the wallet.
+
+```typescript
+await sdk.deinit(): Promise<void>
+```
+
+### Example
+
+<CodeGroup>
+```typescript React
+import { useEffect } from 'react';
+import { NexusSDK } from '@avail-project/nexus-core';
+
+function App() {
+  const sdk = new NexusSDK({ network: 'mainnet' });
+  
+  useEffect(() => {
+    // Initialize on mount
+    sdk.initialize(window.ethereum);
+    
+    // Cleanup on unmount
+    return () => {
+      sdk.deinit();
+    };
+  }, []);
+  
+  return <div>My App</div>;
+}
+```
+
+```typescript Vue
+import { onMounted, onUnmounted } from 'vue';
+import { NexusSDK } from '@avail-project/nexus-core';
+
+export default {
+  setup() {
+    const sdk = new NexusSDK({ network: 'mainnet' });
+    
+    onMounted(async () => {
+      await sdk.initialize(window.ethereum);
+    });
+    
+    onUnmounted(async () => {
+      await sdk.deinit();
+    });
+  },
+};
+```
+
+```typescript Vanilla JS
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(window.ethereum);
+
+// When disconnecting wallet or closing app
+window.addEventListener('beforeunload', async () => {
+  await sdk.deinit();
+});
+```
+</CodeGroup>
+
+---
+
+## Complete Lifecycle Example
+
+Here's a complete example showing the full SDK lifecycle:
+
+```typescript
+import { NexusSDK, NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+class WalletManager {
+  private sdk: NexusSDK | null = null;
+  
+  async connect() {
+    // Create SDK instance
+    this.sdk = new NexusSDK({
+      network: 'mainnet',
+      debug: process.env.NODE_ENV === 'development',
+      analytics: {
+        enabled: true,
+        privacy: {
+          anonymizeWallets: true,
+        },
+      },
+    });
+    
+    // Set up hooks before initialization
+    this.sdk.setOnIntentHook(({ intent, allow, deny }) => {
+      // Show intent confirmation UI
+      const confirmed = confirm(
+        `Bridge ${intent.sourcesTotal} to ${intent.destination.chainName}?`
+      );
+      confirmed ? allow() : deny();
+    });
+    
+    this.sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+      // Show approval confirmation UI
+      const confirmed = confirm('Approve token allowance?');
+      confirmed ? allow(['min']) : deny();
+    });
+    
+    // Initialize with provider
+    await this.sdk.initialize(window.ethereum);
+    
+    console.log('SDK initialized and ready');
+  }
+  
+  async disconnect() {
+    if (this.sdk) {
+      await this.sdk.deinit();
+      this.sdk = null;
+      console.log('SDK deinitialized');
+    }
+  }
+  
+  isReady(): boolean {
+    return this.sdk?.isInitialized() ?? false;
+  }
+  
+  getSDK(): NexusSDK {
+    if (!this.sdk || !this.sdk.isInitialized()) {
+      throw new Error('SDK not initialized');
+    }
+    return this.sdk;
+  }
+}
+
+// Usage
+const wallet = new WalletManager();
+
+// Connect wallet
+await wallet.connect();
+
+// Use SDK
+if (wallet.isReady()) {
+  const sdk = wallet.getSDK();
+  const balances = await sdk.getBalancesForBridge();
+}
+
+// Disconnect wallet
+await wallet.disconnect();
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="NexusSDK Class" icon="code" href="/api/nexus-sdk">
+    Main SDK class reference
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Handle initialization errors
+  </Card>
+</CardGroup>

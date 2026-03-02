@@ -1,80 +1,423 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Build your first cross-chain bridge transaction with the Nexus SDK in under 5 minutes
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through building a complete cross-chain bridge application using the Avail Nexus SDK. You'll learn how to:
 
-### Step 1: Set up your local environment
+- Initialize the SDK with a wallet provider
+- Set up user approval hooks
+- Fetch cross-chain balances
+- Execute a bridge transaction
+- Track transaction progress
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+<Steps>
 
-### Step 2: Deploy your changes
+<Step title="Import the SDK">
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
+First, import the necessary components from the SDK:
+
+```typescript
+import { NexusSDK, NEXUS_EVENTS } from '@avail-project/nexus-core';
+import type { BridgeParams } from '@avail-project/nexus-core';
+```
+
+These imports give you:
+- `NexusSDK` - The main SDK class
+- `NEXUS_EVENTS` - Event constants for tracking transaction progress
+- `BridgeParams` - TypeScript type for bridge parameters
+
+</Step>
+
+<Step title="Initialize the SDK">
+
+Create and initialize an SDK instance with a wallet provider:
+
+```typescript
+// Create SDK instance (testnet for development)
+const sdk = new NexusSDK({ network: 'testnet' });
+
+// Initialize with MetaMask or any EIP-1193 provider
+await sdk.initialize(window.ethereum);
+```
+
+<Accordion title="Using a Custom Provider">
+For Node.js environments or custom wallet implementations:
+
+```typescript
+import { ethers } from 'ethers';
+
+// Example: Using ethers.js wallet
+const wallet = new ethers.Wallet(privateKey, provider);
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(wallet);
+```
 </Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+The SDK supports both `'mainnet'` and `'testnet'` networks. Always start with `'testnet'` during development.
 </Note>
+
+</Step>
+
+<Step title="Set Up Approval Hooks">
+
+Configure hooks to handle user approvals. These hooks are called when the SDK needs user permission:
+
+```typescript
+// Intent approval hook - called when user needs to approve bridge details
+sdk.setOnIntentHook(({ intent, allow, deny }) => {
+  // Display intent details to user
+  console.log('Bridge amount:', intent.destination.amount);
+  console.log('Destination chain:', intent.destination.chainName);
+  console.log('Total fees:', intent.fees.total);
+  console.log('Source chains:', intent.sources);
+  
+  // User approves the transaction
+  allow();
+  
+  // Or user denies (will throw USER_DENIED_INTENT error)
+  // deny();
+});
+
+// Allowance approval hook - called when token approval is needed
+sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+  // Show which tokens need approval
+  sources.forEach(source => {
+    console.log(`Approve ${source.token.symbol} on ${source.chain.name}`);
+    console.log(`Current: ${source.allowance.current}`);
+    console.log(`Required: ${source.allowance.minimum}`);
+  });
+  
+  // Approve minimum required (recommended)
+  allow(['min']);
+  
+  // Or approve unlimited
+  // allow(['max']);
+});
+```
+
+<Tip>
+Using `'min'` for allowances is more secure as it only approves the exact amount needed for the transaction.
+</Tip>
+
+</Step>
+
+<Step title="Fetch User Balances">
+
+Retrieve the user's token balances across all supported chains:
+
+```typescript
+const balances = await sdk.getBalancesForBridge();
+
+// Display balances
+balances.forEach(asset => {
+  console.log(`${asset.symbol}: ${asset.balance} ($${asset.balanceInFiat})`);
+  
+  // Show per-chain breakdown
+  asset.breakdown.forEach(chainBalance => {
+    console.log(`  ${chainBalance.chain.name}: ${chainBalance.balance}`);
+  });
+});
+```
+
+Example output:
+```
+USDC: 1,234.56 ($1234.56)
+  Ethereum: 500.00
+  Polygon: 734.56
+ETH: 2.5 ($8,640.00)
+  Ethereum: 1.0
+  Base: 1.5
+```
+
+</Step>
+
+<Step title="Execute a Bridge Transaction">
+
+Now execute a bridge transaction with real-time progress tracking:
+
+```typescript
+const bridgeParams: BridgeParams = {
+  token: 'USDC',
+  amount: 100_000_000n, // 100 USDC (6 decimals)
+  toChainId: 137, // Polygon
+  // Optional: specify source chains
+  // sourceChains: [1, 8453], // Ethereum and Base
+  // Optional: provide gas on destination
+  // gas: 100000n,
+};
+
+const result = await sdk.bridge(bridgeParams, {
+  onEvent: (event) => {
+    // Track all steps
+    if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+      console.log('Bridge steps:', event.args);
+    }
+    
+    // Track each completed step
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      const step = event.args;
+      console.log(`✓ ${step.type}`);
+      
+      // Show transaction links
+      if (step.data?.explorerURL) {
+        console.log(`  View: ${step.data.explorerURL}`);
+      }
+    }
+  },
+});
+
+console.log('Bridge complete!');
+console.log('Transaction:', result.explorerUrl);
+console.log('Source transactions:', result.sourceTxs);
+```
+
+<Note>
+**Important:** Token amounts must be provided in the token's smallest unit (wei for ETH, 6 decimals for USDC).
+
+Examples:
+- 1 ETH = `1_000_000_000_000_000_000n` (18 decimals)
+- 100 USDC = `100_000_000n` (6 decimals)
+- 50 USDT = `50_000_000n` (6 decimals)
+</Note>
+
+</Step>
+
+</Steps>
+
+## Complete Example
+
+Here's a full working example you can copy and adapt:
+
+<CodeGroup>
+
+```typescript browser.ts
+import { NexusSDK, NEXUS_EVENTS } from '@avail-project/nexus-core';
+import type { BridgeParams } from '@avail-project/nexus-core';
+
+async function main() {
+  // 1. Initialize SDK
+  const sdk = new NexusSDK({ network: 'testnet' });
+  await sdk.initialize(window.ethereum);
+  
+  // 2. Set up hooks
+  sdk.setOnIntentHook(({ intent, allow, deny }) => {
+    const confirmed = confirm(
+      `Bridge ${intent.destination.amount} to ${intent.destination.chainName}?\n` +
+      `Fees: ${intent.fees.total}`
+    );
+    confirmed ? allow() : deny();
+  });
+  
+  sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+    const confirmed = confirm(
+      `Approve ${sources.length} token(s)?`
+    );
+    confirmed ? allow(['min']) : deny();
+  });
+  
+  // 3. Fetch balances
+  const balances = await sdk.getBalancesForBridge();
+  console.log('Your balances:', balances);
+  
+  // 4. Execute bridge
+  const params: BridgeParams = {
+    token: 'USDC',
+    amount: 10_000_000n, // 10 USDC
+    toChainId: 84532, // Base Sepolia
+  };
+  
+  const result = await sdk.bridge(params, {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+        console.log('Step completed:', event.args.type);
+      }
+    },
+  });
+  
+  console.log('Success!', result.explorerUrl);
+}
+
+main().catch(console.error);
+```
+
+```typescript node.ts
+import { NexusSDK, NEXUS_EVENTS } from '@avail-project/nexus-core';
+import { ethers } from 'ethers';
+
+async function main() {
+  // 1. Create wallet provider
+  const privateKey = process.env.PRIVATE_KEY;
+  const wallet = new ethers.Wallet(privateKey, new ethers.InfuraProvider());
+  
+  // 2. Initialize SDK
+  const sdk = new NexusSDK({ network: 'testnet' });
+  await sdk.initialize(wallet);
+  
+  console.log('Wallet address:', wallet.address);
+  
+  // 3. Set up auto-approval hooks for CLI
+  sdk.setOnIntentHook(({ intent, allow }) => {
+    console.log('Intent:', intent.destination);
+    allow(); // Auto-approve for CLI
+  });
+  
+  sdk.setOnAllowanceHook(({ sources, allow }) => {
+    console.log('Approving', sources.length, 'token(s)');
+    allow(['min']);
+  });
+  
+  // 4. Fetch balances
+  const balances = await sdk.getBalancesForBridge();
+  for (const asset of balances) {
+    if (asset.balance !== '0') {
+      console.log(`${asset.symbol}: ${asset.balance}`);
+    }
+  }
+  
+  // 5. Execute bridge
+  const result = await sdk.bridge(
+    {
+      token: 'USDC',
+      amount: 10_000_000n,
+      toChainId: 421614, // Arbitrum Sepolia
+    },
+    {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          console.log('✓', event.args.type);
+        }
+      },
+    }
+  );
+  
+  console.log('\nBridge complete!');
+  console.log('Explorer:', result.explorerUrl);
+}
+
+main();
+```
+
+</CodeGroup>
+
+## Understanding Bridge Steps
+
+During a bridge transaction, you'll see these key steps:
+
+| Step | Description |
+|------|-------------|
+| `INTENT_ACCEPTED` | Intent created and accepted by solver |
+| `INTENT_HASH_SIGNED` | User signed the intent hash |
+| `ALLOWANCE_USER_APPROVAL` | Waiting for token approval |
+| `ALLOWANCE_APPROVAL_MINED` | Approval transaction mined |
+| `INTENT_DEPOSIT` | Deposit initiated on source chain |
+| `INTENT_DEPOSITS_CONFIRMED` | All deposits confirmed |
+| `INTENT_FULFILLED` | Intent fulfilled on destination |
+| `TRANSACTION_CONFIRMED` | Final transaction confirmed |
+
+<Tip>
+Each step includes an `explorerURL` in its data, allowing you to provide users with real-time transaction links.
+</Tip>
+
+## Error Handling
+
+Always wrap SDK calls in try-catch blocks:
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  const result = await sdk.bridge(params);
+  console.log('Success:', result.explorerUrl);
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.USER_DENIED_INTENT:
+        console.log('User cancelled transaction');
+        break;
+      case ERROR_CODES.INSUFFICIENT_BALANCE:
+        console.error('Insufficient balance for bridge');
+        break;
+      case ERROR_CODES.TRANSACTION_TIMEOUT:
+        console.error('Transaction timed out, check explorer');
+        break;
+      default:
+        console.error('Bridge failed:', error.message);
+    }
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+## Simulating Transactions
+
+Before executing a bridge, you can simulate it to preview fees and requirements:
+
+```typescript
+const simulation = await sdk.simulateBridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137,
+});
+
+console.log('Estimated fees:', simulation.intent.fees.total);
+console.log('Source chains:', simulation.intent.sources);
+console.log('Destination amount:', simulation.intent.destination.amount);
+
+// Show user the simulation before confirming
+if (confirm('Proceed with bridge?')) {
+  await sdk.bridge(params);
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Bridge Operations"
+    icon="bridge"
+    href="/api/bridge-operations"
+  >
+    Explore advanced bridging features and options
+  </Card>
+  <Card
+    title="Swap Operations"
+    icon="arrow-right-arrow-left"
+    href="/api/swap-operations"
+  >
+    Learn how to perform cross-chain swaps
+  </Card>
+  <Card
+    title="Balance Management"
+    icon="wallet"
+    href="/api/balance-operations"
+  >
+    Work with multi-chain balance aggregation
+  </Card>
+  <Card
+    title="Event Handling"
+    icon="bolt"
+    href="/concepts/events"
+  >
+    Build real-time progress UIs with events
+  </Card>
+</CardGroup>
+
+---
+
+<Warning>
+**Testing on Testnet**
+
+Always test your integration on testnet first:
+
+1. Use `network: 'testnet'` in SDK configuration
+2. Get testnet tokens from faucets (Sepolia, Base Sepolia, etc.)
+3. Verify your integration works end-to-end
+4. Switch to `network: 'mainnet'` only when ready for production
+
+Testnet chain IDs are different from mainnet - check the [supported networks documentation](/resources/supported-networks).
+</Warning>

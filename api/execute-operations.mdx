@@ -1,0 +1,659 @@
+---
+title: 'Execute Operations'
+description: 'Execute smart contracts with automatic bridging and funding'
+---
+
+## execute
+
+Standalone function to execute a smart contract call on a destination chain. Use this when you already have sufficient funds on the target chain.
+
+```typescript
+await sdk.execute(
+  params: ExecuteParams,
+  options?: OnEventParam
+): Promise<ExecuteResult>
+```
+
+### Parameters
+
+<ParamField path="params" type="ExecuteParams" required>
+  Execute operation parameters
+  
+  <Expandable title="properties">
+    <ParamField path="toChainId" type="number" required>
+      Target chain ID
+    </ParamField>
+    
+    <ParamField path="to" type="Hex" required>
+      Contract address to execute
+    </ParamField>
+    
+    <ParamField path="data" type="Hex" optional>
+      Encoded function call data
+    </ParamField>
+    
+    <ParamField path="value" type="bigint" optional>
+      Native token value to send (in wei)
+    </ParamField>
+    
+    <ParamField path="gas" type="bigint" optional>
+      Gas limit for the transaction
+    </ParamField>
+    
+    <ParamField path="gasPrice" type="'low' | 'medium' | 'high'" optional>
+      Gas price strategy
+    </ParamField>
+    
+    <ParamField path="tokenApproval" type="object" optional>
+      Token approval before execution
+      
+      <Expandable title="properties">
+        <ParamField path="token" type="string" required>
+          Token symbol to approve
+        </ParamField>
+        
+        <ParamField path="amount" type="bigint" required>
+          Amount to approve
+        </ParamField>
+        
+        <ParamField path="spender" type="Hex" required>
+          Spender address (usually the contract)
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField path="waitForReceipt" type="boolean" optional>
+      Wait for transaction receipt before returning
+    </ParamField>
+    
+    <ParamField path="receiptTimeout" type="number" optional>
+      Receipt wait timeout in milliseconds
+    </ParamField>
+    
+    <ParamField path="requiredConfirmations" type="number" optional>
+      Required block confirmations
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="OnEventParam" optional>
+  Event callbacks
+</ParamField>
+
+### Returns
+
+<ResponseField name="ExecuteResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="transactionHash" type="string">
+      Transaction hash
+    </ResponseField>
+    
+    <ResponseField name="explorerUrl" type="string">
+      Block explorer URL
+    </ResponseField>
+    
+    <ResponseField name="chainId" type="number">
+      Chain ID where execution occurred
+    </ResponseField>
+    
+    <ResponseField name="receipt" type="TransactionReceipt" optional>
+      Transaction receipt (if `waitForReceipt` was true)
+    </ResponseField>
+    
+    <ResponseField name="confirmations" type="number" optional>
+      Number of confirmations
+    </ResponseField>
+    
+    <ResponseField name="gasUsed" type="string" optional>
+      Gas used by the transaction
+    </ResponseField>
+    
+    <ResponseField name="effectiveGasPrice" type="string" optional>
+      Effective gas price
+    </ResponseField>
+    
+    <ResponseField name="approvalTransactionHash" type="string" optional>
+      Token approval transaction hash (if approval was needed)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Basic Contract Call
+import { encodeFunctionData } from 'viem';
+
+// Encode function call
+const data = encodeFunctionData({
+  abi: contractABI,
+  functionName: 'deposit',
+  args: [amount],
+});
+
+const result = await sdk.execute({
+  toChainId: 1, // Ethereum
+  to: '0xContractAddress',
+  data,
+});
+
+console.log('Transaction:', result.transactionHash);
+console.log('Explorer:', result.explorerUrl);
+```
+
+```typescript With Token Approval
+import { encodeFunctionData } from 'viem';
+
+const amount = 100_000_000n; // 100 USDC
+
+const data = encodeFunctionData({
+  abi: contractABI,
+  functionName: 'stake',
+  args: [amount],
+});
+
+const result = await sdk.execute({
+  toChainId: 1,
+  to: '0xStakingContract',
+  data,
+  tokenApproval: {
+    token: 'USDC',
+    amount: amount,
+    spender: '0xStakingContract',
+  },
+});
+
+if (result.approvalTransactionHash) {
+  console.log('Approval TX:', result.approvalTransactionHash);
+}
+console.log('Stake TX:', result.transactionHash);
+```
+
+```typescript Wait for Receipt
+const result = await sdk.execute({
+  toChainId: 137, // Polygon
+  to: '0xContract',
+  data: '0x...',
+  waitForReceipt: true,
+  receiptTimeout: 60000, // 60 seconds
+  requiredConfirmations: 3,
+});
+
+if (result.receipt) {
+  console.log('Status:', result.receipt.status);
+  console.log('Gas used:', result.gasUsed);
+  console.log('Confirmations:', result.confirmations);
+}
+```
+
+```typescript Send Native Token
+const result = await sdk.execute({
+  toChainId: 1,
+  to: '0xContract',
+  value: 1_000_000_000_000_000_000n, // 1 ETH
+  data: '0x...', // Optional function call
+});
+```
+</CodeGroup>
+
+---
+
+## simulateExecute
+
+Simulate contract execution to estimate gas costs and validate parameters before executing.
+
+```typescript
+await sdk.simulateExecute(
+  params: ExecuteParams
+): Promise<ExecuteSimulation>
+```
+
+### Parameters
+
+<ParamField path="params" type="ExecuteParams" required>
+  Same parameters as `execute()` method
+</ParamField>
+
+### Returns
+
+<ResponseField name="ExecuteSimulation" type="object">
+  <Expandable title="properties">
+    <ResponseField name="gasUsed" type="bigint">
+      Estimated gas units required
+    </ResponseField>
+    
+    <ResponseField name="gasPrice" type="bigint">
+      Current gas price (in wei)
+    </ResponseField>
+    
+    <ResponseField name="gasFee" type="bigint">
+      Total estimated gas fee (gasUsed * gasPrice)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```typescript
+import { encodeFunctionData, formatEther } from 'viem';
+
+const data = encodeFunctionData({
+  abi: contractABI,
+  functionName: 'deposit',
+  args: [amount],
+});
+
+const simulation = await sdk.simulateExecute({
+  toChainId: 1,
+  to: '0xContract',
+  data,
+});
+
+console.log('Gas estimate:', simulation.gasUsed);
+console.log('Gas price:', formatEther(simulation.gasPrice));
+console.log('Total fee:', formatEther(simulation.gasFee), 'ETH');
+
+// Show confirmation to user
+const confirmed = confirm(
+  `Estimated fee: ${formatEther(simulation.gasFee)} ETH. Continue?`
+);
+
+if (confirmed) {
+  await sdk.execute({
+    toChainId: 1,
+    to: '0xContract',
+    data,
+    gas: simulation.gasUsed, // Use simulated gas
+  });
+}
+```
+
+---
+
+## bridgeAndExecute
+
+Bridge tokens to a destination chain and execute a contract call. The SDK automatically checks if bridging is needed based on available balance.
+
+```typescript
+await sdk.bridgeAndExecute(
+  params: BridgeAndExecuteParams,
+  options?: OnEventParam & BeforeExecuteHook
+): Promise<BridgeAndExecuteResult>
+```
+
+### Parameters
+
+<ParamField path="params" type="BridgeAndExecuteParams" required>
+  Bridge and execute parameters
+  
+  <Expandable title="properties">
+    <ParamField path="token" type="string" required>
+      Token to bridge
+    </ParamField>
+    
+    <ParamField path="amount" type="bigint" required>
+      Amount to bridge (in smallest unit)
+    </ParamField>
+    
+    <ParamField path="toChainId" type="number" required>
+      Destination chain ID
+    </ParamField>
+    
+    <ParamField path="sourceChains" type="number[]" optional>
+      Specific source chains to use (auto-selected if omitted)
+    </ParamField>
+    
+    <ParamField path="execute" type="Omit<ExecuteParams, 'toChainId'>" required>
+      Contract execution parameters (all ExecuteParams except toChainId)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="OnEventParam & BeforeExecuteHook" optional>
+  Event callbacks and pre-execution hook
+  
+  <Expandable title="properties">
+    <ParamField path="onEvent" type="function" optional>
+      Event callback for progress tracking
+    </ParamField>
+    
+    <ParamField path="beforeExecute" type="() => Promise<{ value?, data?, gas? }>" optional>
+      Hook called before contract execution. Use to update execution parameters dynamically based on bridged amount.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Returns
+
+<ResponseField name="BridgeAndExecuteResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="executeTransactionHash" type="string">
+      Execute transaction hash
+    </ResponseField>
+    
+    <ResponseField name="executeExplorerUrl" type="string">
+      Execute transaction explorer URL
+    </ResponseField>
+    
+    <ResponseField name="toChainId" type="number">
+      Destination chain ID
+    </ResponseField>
+    
+    <ResponseField name="bridgeSkipped" type="boolean">
+      Indicates if bridge was skipped due to sufficient balance
+    </ResponseField>
+    
+    <ResponseField name="approvalTransactionHash" type="string" optional>
+      Token approval transaction hash (if approval was needed)
+    </ResponseField>
+    
+    <ResponseField name="bridgeExplorerUrl" type="string" optional>
+      Bridge explorer URL (undefined if bridge was skipped)
+    </ResponseField>
+    
+    <ResponseField name="intent" type="ReadableIntent" optional>
+      Intent details (undefined if bridge was skipped)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Basic Bridge + Execute
+import { encodeFunctionData } from 'viem';
+
+const amount = 100_000_000n; // 100 USDC
+
+const data = encodeFunctionData({
+  abi: contractABI,
+  functionName: 'deposit',
+  args: [amount],
+});
+
+const result = await sdk.bridgeAndExecute({
+  token: 'USDC',
+  amount: amount,
+  toChainId: 1,
+  execute: {
+    to: '0xDeFiProtocol',
+    data,
+    tokenApproval: {
+      token: 'USDC',
+      amount: amount,
+      spender: '0xDeFiProtocol',
+    },
+  },
+});
+
+if (result.bridgeSkipped) {
+  console.log('Used existing balance - no bridge needed');
+} else {
+  console.log('Bridge TX:', result.bridgeExplorerUrl);
+}
+console.log('Execute TX:', result.executeExplorerUrl);
+```
+
+```typescript DeFi Protocol Integration
+// Deposit into lending protocol
+const depositAmount = 1000_000_000n; // 1000 USDC
+
+const depositData = encodeFunctionData({
+  abi: aaveABI,
+  functionName: 'supply',
+  args: [
+    '0xUSDC', // asset
+    depositAmount, // amount
+    userAddress, // onBehalfOf
+    0, // referralCode
+  ],
+});
+
+const result = await sdk.bridgeAndExecute({
+  token: 'USDC',
+  amount: depositAmount,
+  toChainId: 137, // Polygon
+  sourceChains: [1, 42161], // Ethereum + Arbitrum
+  execute: {
+    to: '0xAavePool',
+    data: depositData,
+    tokenApproval: {
+      token: 'USDC',
+      amount: depositAmount,
+      spender: '0xAavePool',
+    },
+    waitForReceipt: true,
+  },
+});
+
+if (result.receipt) {
+  console.log('Deposit successful!');
+  console.log('Receipt:', result.receipt);
+}
+```
+
+```typescript NFT Minting
+// Mint NFT on destination chain
+const mintPrice = 50_000_000n; // 50 USDC
+
+const mintData = encodeFunctionData({
+  abi: nftABI,
+  functionName: 'mint',
+  args: [userAddress, 1], // recipient, quantity
+});
+
+const result = await sdk.bridgeAndExecute({
+  token: 'USDC',
+  amount: mintPrice,
+  toChainId: 8453, // Base
+  execute: {
+    to: '0xNFTContract',
+    data: mintData,
+    tokenApproval: {
+      token: 'USDC',
+      amount: mintPrice,
+      spender: '0xNFTContract',
+    },
+  },
+});
+
+console.log('NFT minted!', result.executeExplorerUrl);
+```
+
+```typescript With beforeExecute Hook
+// Update parameters dynamically based on actual bridged amount
+const result = await sdk.bridgeAndExecute(
+  {
+    token: 'USDC',
+    amount: 100_000_000n,
+    toChainId: 1,
+    execute: {
+      to: '0xContract',
+      data: '0x', // Will be updated in beforeExecute
+    },
+  },
+  {
+    beforeExecute: async () => {
+      // Get actual balance on destination after bridge
+      const balances = await sdk.getBalancesForBridge();
+      const usdc = balances.find(a => a.symbol === 'USDC');
+      const destBalance = usdc?.breakdown.find(b => b.chain.id === 1);
+      
+      if (destBalance) {
+        const actualAmount = sdk.utils.parseUnits(
+          destBalance.balance,
+          6
+        );
+        
+        // Encode with actual amount
+        const data = encodeFunctionData({
+          abi: contractABI,
+          functionName: 'deposit',
+          args: [actualAmount],
+        });
+        
+        return { data };
+      }
+      
+      return {};
+    },
+  }
+);
+```
+</CodeGroup>
+
+---
+
+## simulateBridgeAndExecute
+
+Simulate bridge-and-execute operation to estimate costs before execution.
+
+```typescript
+await sdk.simulateBridgeAndExecute(
+  params: BridgeAndExecuteParams
+): Promise<BridgeAndExecuteSimulationResult>
+```
+
+### Parameters
+
+<ParamField path="params" type="BridgeAndExecuteParams" required>
+  Same parameters as `bridgeAndExecute()` method
+</ParamField>
+
+### Returns
+
+<ResponseField name="BridgeAndExecuteSimulationResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="bridgeSimulation" type="SimulationResult | null">
+      Bridge simulation (null if bridge not needed due to sufficient balance)
+    </ResponseField>
+    
+    <ResponseField name="executeSimulation" type="ExecuteSimulation">
+      Execute simulation with gas estimates
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```typescript
+import { encodeFunctionData, formatEther } from 'viem';
+
+const amount = 100_000_000n;
+
+const data = encodeFunctionData({
+  abi: contractABI,
+  functionName: 'deposit',
+  args: [amount],
+});
+
+const simulation = await sdk.simulateBridgeAndExecute({
+  token: 'USDC',
+  amount: amount,
+  toChainId: 1,
+  execute: {
+    to: '0xContract',
+    data,
+    tokenApproval: {
+      token: 'USDC',
+      amount: amount,
+      spender: '0xContract',
+    },
+  },
+});
+
+// Display cost breakdown
+if (simulation.bridgeSimulation) {
+  console.log('Bridge fees:', simulation.bridgeSimulation.intent.fees.total);
+  console.log('Bridge from:', simulation.bridgeSimulation.intent.sources);
+}
+
+console.log('Execute gas:', simulation.executeSimulation.gasUsed);
+console.log('Execute fee:', formatEther(simulation.executeSimulation.gasFee));
+
+// Calculate total cost
+const bridgeFee = simulation.bridgeSimulation 
+  ? parseFloat(simulation.bridgeSimulation.intent.fees.total)
+  : 0;
+const executeFee = formatEther(simulation.executeSimulation.gasFee);
+
+console.log(`Total estimated cost: $${bridgeFee.toFixed(2)} + ${executeFee} ETH`);
+```
+
+---
+
+## Bridge Skip Optimization
+
+The SDK automatically detects if you have sufficient balance on the destination chain:
+
+```typescript
+const result = await sdk.bridgeAndExecute({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 1,
+  execute: { /* ... */ },
+});
+
+if (result.bridgeSkipped) {
+  // Bridge was not needed - used existing balance
+  console.log('✓ Executed using local balance');
+  console.log('✓ Saved bridge fees and time!');
+  console.log('Execute TX:', result.executeTransactionHash);
+} else {
+  // Bridge occurred first
+  console.log('Bridge TX:', result.bridgeExplorerUrl);
+  console.log('Execute TX:', result.executeTransactionHash);
+}
+```
+
+---
+
+## Error Handling
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  const result = await sdk.bridgeAndExecute({
+    token: 'USDC',
+    amount: 100_000_000n,
+    toChainId: 1,
+    execute: { to: '0x...', data: '0x...' },
+  });
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.INSUFFICIENT_BALANCE:
+        console.error('Not enough tokens for bridge + execute');
+        break;
+        
+      case ERROR_CODES.TRANSACTION_REVERTED:
+        console.error('Contract execution reverted');
+        // Check contract requirements
+        break;
+        
+      case ERROR_CODES.SIMULATION_FAILED:
+        console.error('Simulation failed - check parameters');
+        break;
+        
+      case ERROR_CODES.USER_DENIED_ALLOWANCE:
+        console.log('User denied token approval');
+        break;
+        
+      default:
+        console.error('Operation failed:', error.message);
+    }
+  }
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Bridge Operations" icon="bridge" href="/api/bridge-operations">
+    Learn about bridging
+  </Card>
+  <Card title="DeFi Integration" icon="coins" href="/examples/bridge-and-execute">
+    Integrate with DeFi protocols
+  </Card>
+</CardGroup>

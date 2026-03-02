@@ -1,0 +1,413 @@
+---
+title: 'Swap with Exact Output'
+description: 'Execute token swaps with exact output amounts using the Nexus SDK'
+icon: 'bullseye'
+---
+
+This guide demonstrates how to swap tokens by specifying the exact output amount you want to receive. The SDK will calculate the required input amount based on current market rates.
+
+## Overview
+
+Exact output swaps allow you to:
+
+- Specify exactly how much you want to receive
+- The SDK determines the required input automatically
+- Ideal for target-based transactions
+- Perfect for purchasing exact amounts
+
+## When to Use Exact Output Swaps
+
+<Tabs>
+  <Tab title="Best For">
+    - Buying an exact amount of tokens
+    - Meeting specific target amounts
+    - Paying exact invoices or bills
+    - Funding contracts with precise amounts
+  </Tab>
+  <Tab title="Not Ideal For">
+    - Spending all available balance
+    - Use [Exact Input Swaps](/examples/swap-exact-in) instead
+  </Tab>
+</Tabs>
+
+## Browser Example
+
+<Steps>
+  <Step title="Initialize the SDK">
+    Set up the Nexus SDK for swap operations:
+
+    ```typescript
+    import { NexusSDK, type EthereumProvider } from '@avail-project/nexus-core';
+
+    async function getWallet(): Promise<EthereumProvider> {
+      const provider = (window as any).ethereum;
+      if (!provider) {
+        throw new Error('Install a wallet like MetaMask to continue');
+      }
+      return provider;
+    }
+
+    const provider = await getWallet();
+    const sdk = new NexusSDK({ network: 'mainnet' });
+    await sdk.initialize(provider);
+    ```
+
+    <Note>
+      Swap operations are only available on mainnet. Testnet swaps are not supported.
+    </Note>
+  </Step>
+
+  <Step title="Configure swap parameters">
+    Define the exact output amount you want to receive:
+
+    ```typescript
+    import {
+      SUPPORTED_CHAINS,
+      TOKEN_CONTRACT_ADDRESSES,
+      type ExactOutSwapInput,
+    } from '@avail-project/nexus-core';
+
+    const swapParams: ExactOutSwapInput = {
+      toChainId: SUPPORTED_CHAINS.ARBITRUM,
+      toTokenAddress: TOKEN_CONTRACT_ADDRESSES.USDT[SUPPORTED_CHAINS.ARBITRUM],
+      toAmount: 1_000_000_000n, // Receive exactly 1000 USDT (6 decimals)
+    };
+    ```
+
+    <Info>
+      The SDK will automatically determine which source chains and tokens to use based on your available balances.
+    </Info>
+  </Step>
+
+  <Step title="Optional: Restrict sources">
+    Optionally specify which chains/tokens to use as sources:
+
+    ```typescript
+    const swapParams: ExactOutSwapInput = {
+      toChainId: SUPPORTED_CHAINS.BASE,
+      toTokenAddress: TOKEN_CONTRACT_ADDRESSES.USDC[SUPPORTED_CHAINS.BASE],
+      toAmount: 1_000_000_000n, // 1000 USDC
+
+      // Optional: restrict source chains and tokens
+      fromSources: [
+        {
+          chainId: SUPPORTED_CHAINS.ARBITRUM,
+          tokenAddress: TOKEN_CONTRACT_ADDRESSES.USDT[SUPPORTED_CHAINS.ARBITRUM],
+        },
+        {
+          chainId: SUPPORTED_CHAINS.OPTIMISM,
+          tokenAddress: TOKEN_CONTRACT_ADDRESSES.USDC[SUPPORTED_CHAINS.OPTIMISM],
+        },
+      ],
+
+      // Optional: supply gas to destination
+      toNativeAmount: 10_000_000_000_000_000n, // 0.01 ETH for gas
+    };
+    ```
+  </Step>
+
+  <Step title="Set up hooks">
+    Configure the swap intent and allowance hooks:
+
+    ```typescript
+    // Swap intent hook
+    sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+      // Show what user will send
+      console.log('You will send:');
+      intent.sources.forEach((source) => {
+        console.log(`  ${source.amount} ${source.token.symbol} on ${source.chain.name}`);
+      });
+
+      // Show what user will receive
+      console.log('You will receive:');
+      console.log(`  ${intent.destination.amount} ${intent.destination.token.symbol}`);
+      console.log(`  on ${intent.destination.chain.name}`);
+
+      // Show gas being supplied
+      if (intent.destination.gas) {
+        console.log('Gas supplied:', intent.destination.gas.amount);
+      }
+
+      // Refresh quote if needed (prices may have changed)
+      const refreshedIntent = await refresh();
+      console.log('Updated quote:', refreshedIntent);
+
+      // User approves
+      if (userConfirmsSwap()) {
+        allow();
+      } else {
+        deny();
+      }
+    });
+
+    // Allowance hook
+    sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+      // Show required approvals
+      sources.forEach((source) => {
+        console.log(`Approve ${source.token.symbol} on ${source.chain.name}`);
+        console.log(`  Required: ${source.allowance.minimum}`);
+      });
+
+      if (userConfirmsApprovals()) {
+        allow(['min']); // Approve minimum required
+      } else {
+        deny();
+      }
+    });
+    ```
+  </Step>
+
+  <Step title="Execute the swap">
+    Run the swap with event tracking:
+
+    ```typescript
+    import { NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+    try {
+      const result = await sdk.swapWithExactOut(swapParams, {
+        onEvent: (event) => {
+          if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+            const step = event.args;
+
+            console.log(`Step: ${step.type}`);
+
+            if (step.explorerURL) {
+              console.log(`Explorer: ${step.explorerURL}`);
+            }
+
+            // Update UI progress
+            updateProgressBar(step);
+          }
+        },
+      });
+
+      console.log('Swap completed successfully!');
+      console.log('Result:', result);
+    } catch (error) {
+      console.error('Swap failed:', error);
+    }
+    ```
+  </Step>
+</Steps>
+
+## Node.js Example
+
+For backend applications:
+
+```typescript
+import {
+  NEXUS_EVENTS,
+  NexusSDK,
+  type ExactOutSwapInput,
+} from '@avail-project/nexus-core';
+import { ethers } from 'ethers';
+
+async function executeExactOutSwap(params: ExactOutSwapInput): Promise<boolean> {
+  // Initialize SDK
+  const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!);
+  const sdk = new NexusSDK({ network: 'mainnet' });
+  await sdk.initialize(wallet);
+
+  // Set up hooks to auto-approve
+  sdk.setOnSwapIntentHook(({ allow }) => allow());
+  sdk.setOnAllowanceHook(({ allow }) => allow(['min']));
+
+  try {
+    const result = await sdk.swapWithExactOut(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+          console.log(`[${new Date().toISOString()}] ${event.args.type}`);
+
+          if (event.args.explorerURL) {
+            console.log(`  TX: ${event.args.explorerURL}`);
+          }
+        }
+      },
+    });
+
+    console.log('Swap successful!');
+    console.log('Result:', result);
+    return true;
+  } catch (error) {
+    console.error('Swap failed:', error);
+    return false;
+  }
+}
+
+// Execute: receive exactly 1000 USDT on Arbitrum
+await executeExactOutSwap({
+  toChainId: 42161,
+  toTokenAddress: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', // USDT on Arbitrum
+  toAmount: 1_000_000_000n, // 1000 USDT (6 decimals)
+});
+```
+
+## Comparing Input vs Output
+
+<CodeGroup>
+```typescript Exact Input
+// "I want to spend exactly 1000 USDT"
+const exactInParams: ExactInSwapInput = {
+  from: [
+    {
+      chainId: 42161,
+      tokenAddress: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
+      amount: 1_000_000_000n, // Spend exactly this
+    },
+  ],
+  toChainId: 42161,
+  toTokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // USDC
+};
+// Result: You'll receive ~999 USDC (depending on rate)
+```
+
+```typescript Exact Output
+// "I want to receive exactly 1000 USDC"
+const exactOutParams: ExactOutSwapInput = {
+  toChainId: 42161,
+  toTokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // USDC
+  toAmount: 1_000_000_000n, // Receive exactly this
+};
+// Result: You'll spend ~1001 USDT (depending on rate)
+```
+</CodeGroup>
+
+## Swap Parameters
+
+### ExactOutSwapInput
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `toChainId` | `number` | Yes | Destination chain ID |
+| `toTokenAddress` | `Hex` | Yes | Output token contract address |
+| `toAmount` | `bigint` | Yes | Exact output amount desired |
+| `fromSources` | `Array<{ chainId, tokenAddress }>` | No | Restrict source chains/tokens |
+| `toNativeAmount` | `bigint` | No | Native gas amount for destination |
+
+<Warning>
+  Use **contract addresses** for swap operations, not token symbols. The `TOKEN_CONTRACT_ADDRESSES` constant provides addresses for common tokens.
+</Warning>
+
+## Swap Intent Structure
+
+```typescript
+type SwapIntent = {
+  // What you'll receive
+  destination: {
+    amount: string;
+    chain: { id: number; logo: string; name: string };
+    token: { contractAddress: Hex; decimals: number; symbol: string };
+    gas: {
+      amount: string;
+      token: { contractAddress: Hex; decimals: number; symbol: string };
+    };
+  };
+
+  // What you'll send (determined by SDK)
+  sources: Array<{
+    amount: string;
+    chain: { id: number; logo: string; name: string };
+    token: { contractAddress: Hex; decimals: number; symbol: string };
+  }>;
+};
+```
+
+## Error Handling
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.swapWithExactOut(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.INSUFFICIENT_BALANCE:
+        console.error('Not enough balance to get desired output');
+        // Show user how much they need
+        break;
+
+      case ERROR_CODES.SWAP_FAILED:
+        console.error('Swap failed:', error.data?.details);
+        break;
+
+      case ERROR_CODES.RATES_CHANGED_BEYOND_TOLERANCE:
+        console.error('Market moved too much - refresh quote');
+        // Suggest refreshing via intent hook
+        break;
+
+      case ERROR_CODES.QUOTE_FAILED:
+        console.error('Could not calculate required input');
+        break;
+
+      case ERROR_CODES.USER_DENIED_INTENT:
+        console.log('User cancelled');
+        break;
+
+      default:
+        console.error('Swap error:', error.message);
+    }
+  }
+}
+```
+
+## Supported Tokens
+
+Use the `TOKEN_CONTRACT_ADDRESSES` helper for common tokens:
+
+```typescript
+import { TOKEN_CONTRACT_ADDRESSES, SUPPORTED_CHAINS } from '@avail-project/nexus-core';
+
+// USDC addresses across chains
+const usdcOnBase = TOKEN_CONTRACT_ADDRESSES.USDC[SUPPORTED_CHAINS.BASE];
+const usdcOnArbitrum = TOKEN_CONTRACT_ADDRESSES.USDC[SUPPORTED_CHAINS.ARBITRUM];
+const usdcOnOptimism = TOKEN_CONTRACT_ADDRESSES.USDC[SUPPORTED_CHAINS.OPTIMISM];
+
+// USDT addresses
+const usdtOnPolygon = TOKEN_CONTRACT_ADDRESSES.USDT[SUPPORTED_CHAINS.POLYGON];
+
+// Native ETH (use zero address)
+const eth = '0x0000000000000000000000000000000000000000';
+```
+
+## Advanced: Quote Refresh
+
+Market rates change constantly. Use the `refresh()` function to get updated quotes:
+
+```typescript
+sdk.setOnSwapIntentHook(async ({ intent, allow, refresh }) => {
+  // Show initial quote
+  displayQuote(intent);
+
+  // User wants to see updated price
+  const updatedIntent = await refresh();
+  displayQuote(updatedIntent);
+
+  // Compare prices
+  const initialInput = parseFloat(intent.sources[0].amount);
+  const updatedInput = parseFloat(updatedIntent.sources[0].amount);
+
+  if (updatedInput > initialInput * 1.02) {
+    alert('Price moved unfavorably by more than 2%');
+  }
+
+  allow();
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Swap Exact In" icon="right-left" href="/examples/swap-exact-in">
+    Specify exact input amount instead of output
+  </Card>
+  <Card title="Bridge and Execute" icon="code" href="/examples/bridge-and-execute">
+    Combine swaps with smart contract calls
+  </Card>
+  <Card title="Progress UI" icon="spinner" href="/examples/progress-ui">
+    Build progress tracking interfaces
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/swap-operations">
+    View complete swap API documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,387 @@
+---
+title: 'Allowance Hook'
+description: 'Approve token allowances before bridge and transfer operations'
+---
+
+## Overview
+
+The Allowance Hook is called when token approval is needed before a transaction can execute. This hook allows users to review which tokens need approval, on which chains, and choose the approval amount (minimum, maximum, or custom).
+
+<Info>
+The Allowance Hook is **required** for operations involving ERC-20 tokens. Without setting this hook, token approvals will fail.
+</Info>
+
+## Hook Signature
+
+```typescript
+type OnAllowanceHook = (data: OnAllowanceHookData) => void;
+
+type OnAllowanceHookData = {
+  allow: (amounts: Array<'max' | 'min' | bigint | string>) => void;
+  deny: () => void;
+  sources: AllowanceHookSources;
+};
+```
+
+## Setting the Hook
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+
+sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+  // Display approval request to user
+  sources.forEach((source) => {
+    console.log(`Chain: ${source.chain.name}`);
+    console.log(`Token: ${source.token.symbol}`);
+    console.log(`Current allowance: ${source.allowance.current}`);
+    console.log(`Required minimum: ${source.allowance.minimum}`);
+  });
+
+  // Approve with minimum needed
+  allow(['min']);
+  
+  // Or approve unlimited
+  // allow(['max']);
+  
+  // Or approve custom amounts
+  // allow([1000000n, 2000000n]);
+  
+  // Or deny
+  // deny();
+});
+```
+
+## Parameters
+
+### `allow()`
+
+Approve token allowances with specified amounts.
+
+<ParamField path="allow" type="(amounts: Array<'max' | 'min' | bigint | string>) => void" required>
+  Callback function to approve allowances. Pass an array of approval amounts:
+  - `'min'` - Approve exact minimum required
+  - `'max'` - Approve unlimited (type(uint256).max)
+  - `bigint` or `string` - Approve specific amount
+  
+  The array length must match the number of sources. Use different values per source by index.
+</ParamField>
+
+### `deny()`
+
+Reject the allowance request and cancel the operation.
+
+<ParamField path="deny" type="() => void" required>
+  Callback function to reject the allowance. Throws a `USER_DENIED_ALLOWANCE` error when called.
+</ParamField>
+
+### `sources`
+
+Array of sources requiring allowance approval.
+
+<ParamField path="sources" type="AllowanceHookSources" required>
+  Array containing allowance information for each source chain and token.
+</ParamField>
+
+## AllowanceHookSources Structure
+
+<ResponseField name="sources" type="array" required>
+  Array of allowance sources.
+  
+  <Expandable title="Source properties">
+    <ResponseField name="allowance" type="object" required>
+      Current and required allowance amounts.
+      <Expandable title="Allowance properties">
+        <ResponseField name="current" type="string">Current allowance (human-readable)</ResponseField>
+        <ResponseField name="currentRaw" type="bigint">Current allowance (raw)</ResponseField>
+        <ResponseField name="minimum" type="string">Minimum required (human-readable)</ResponseField>
+        <ResponseField name="minimumRaw" type="bigint">Minimum required (raw)</ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="chain" type="object" required>
+      Chain information.
+      <Expandable title="Chain properties">
+        <ResponseField name="id" type="number">Chain ID</ResponseField>
+        <ResponseField name="name" type="string">Chain name</ResponseField>
+        <ResponseField name="logo" type="string">Chain logo URL</ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="token" type="object" required>
+      Token information.
+      <Expandable title="Token properties">
+        <ResponseField name="contractAddress" type="Hex">Token contract address</ResponseField>
+        <ResponseField name="decimals" type="number">Token decimals</ResponseField>
+        <ResponseField name="logo" type="string">Token logo URL</ResponseField>
+        <ResponseField name="name" type="string">Token name</ResponseField>
+        <ResponseField name="symbol" type="string">Token symbol</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Approval Amount Options
+
+### Minimum (`'min'`)
+
+Approve the exact amount needed for this transaction.
+
+```typescript
+allow(['min']); // Approve minimum for all sources
+```
+
+**Pros:**
+- Most secure
+- Users retain full control
+- Must approve for each transaction
+
+**Cons:**
+- Requires approval for every transaction
+- Higher gas costs over time
+
+### Maximum (`'max'`)
+
+Approve unlimited amount (type(uint256).max).
+
+```typescript
+allow(['max']); // Approve unlimited for all sources
+```
+
+**Pros:**
+- One-time approval
+- Lower gas costs for future transactions
+- Better UX for frequent users
+
+**Cons:**
+- Security risk if contract is compromised
+- Users must trust the protocol
+
+### Custom Amount
+
+Approve a specific amount.
+
+```typescript
+allow([1000000n]); // Approve 1 USDC (6 decimals)
+allow(['1000000']); // Same as above (string format)
+```
+
+**Pros:**
+- Balance between security and convenience
+- Can approve enough for multiple transactions
+- Lower risk than unlimited
+
+**Cons:**
+- Requires understanding token decimals
+- May need re-approval sooner than max
+
+## Examples
+
+### Basic Usage - Minimum Approval
+
+```typescript
+sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+  const confirmed = window.confirm(
+    `Approve ${sources.length} token allowance(s)?`
+  );
+
+  if (confirmed) {
+    allow(['min']); // Minimum for all
+  } else {
+    deny();
+  }
+});
+```
+
+### Different Amounts Per Source
+
+```typescript
+sdk.setOnAllowanceHook(({ sources, allow }) => {
+  // Approve max for first source, min for others
+  const amounts = sources.map((_, index) => 
+    index === 0 ? 'max' : 'min'
+  );
+  
+  allow(amounts);
+});
+```
+
+### With UI Framework (React)
+
+```typescript
+import { useState } from 'react';
+import { type AllowanceHookSources } from '@avail-project/nexus-core';
+
+function AllowanceComponent() {
+  const [sources, setSources] = useState<AllowanceHookSources>([]);
+  const [callbacks, setCallbacks] = useState<{
+    allow: (amounts: Array<'max' | 'min' | bigint>) => void;
+    deny: () => void;
+  } | null>(null);
+  const [selectedAmounts, setSelectedAmounts] = useState<Record<number, 'min' | 'max'>>({});
+
+  const sdk = new NexusSDK({ network: 'mainnet' });
+
+  sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+    setSources(sources);
+    setCallbacks({ allow, deny });
+    // Default to 'min' for all
+    setSelectedAmounts(
+      sources.reduce((acc, _, i) => ({ ...acc, [i]: 'min' }), {})
+    );
+  });
+
+  const handleApprove = () => {
+    const amounts = sources.map((_, i) => selectedAmounts[i]);
+    callbacks?.allow(amounts);
+    setSources([]);
+    setCallbacks(null);
+  };
+
+  return (
+    <div>
+      {sources.length > 0 && (
+        <div className="allowance-review">
+          <h3>Token Approvals Required</h3>
+          
+          {sources.map((source, index) => (
+            <div key={index} className="approval-item">
+              <div className="token-info">
+                <img src={source.token.logo} alt={source.token.symbol} />
+                <h4>{source.token.symbol} on {source.chain.name}</h4>
+              </div>
+              
+              <div className="allowance-info">
+                <p>Current: {source.allowance.current}</p>
+                <p>Required: {source.allowance.minimum}</p>
+              </div>
+
+              <div className="amount-selector">
+                <label>
+                  <input
+                    type="radio"
+                    checked={selectedAmounts[index] === 'min'}
+                    onChange={() => setSelectedAmounts(prev => ({ ...prev, [index]: 'min' }))}
+                  />
+                  Minimum ({source.allowance.minimum})
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    checked={selectedAmounts[index] === 'max'}
+                    onChange={() => setSelectedAmounts(prev => ({ ...prev, [index]: 'max' }))}
+                  />
+                  Unlimited
+                </label>
+              </div>
+            </div>
+          ))}
+
+          <button onClick={handleApprove}>Approve All</button>
+          <button onClick={() => callbacks?.deny()}>Reject</button>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### User Preference Based
+
+```typescript
+const userPreference = localStorage.getItem('approval-preference') || 'min';
+
+sdk.setOnAllowanceHook(({ sources, allow }) => {
+  // Use saved user preference
+  const amounts = sources.map(() => userPreference as 'min' | 'max');
+  allow(amounts);
+});
+```
+
+### Custom Amount with Multiplier
+
+```typescript
+sdk.setOnAllowanceHook(({ sources, allow }) => {
+  // Approve 10x the minimum required
+  const amounts = sources.map(source => 
+    source.allowance.minimumRaw * 10n
+  );
+  
+  allow(amounts);
+});
+```
+
+### Checking Current Allowance
+
+```typescript
+sdk.setOnAllowanceHook(({ sources, allow }) => {
+  sources.forEach((source, index) => {
+    console.log(`Source ${index + 1}:`);
+    console.log(`  Token: ${source.token.symbol}`);
+    console.log(`  Chain: ${source.chain.name}`);
+    console.log(`  Current: ${source.allowance.current}`);
+    console.log(`  Needed: ${source.allowance.minimum}`);
+    console.log(`  Shortfall: ${source.allowance.minimumRaw - source.allowance.currentRaw}`);
+  });
+
+  allow(['min']);
+});
+```
+
+## Error Handling
+
+<Warning>
+Calling `deny()` throws a `NexusError` with code `USER_DENIED_ALLOWANCE`. This is expected behavior when users reject the approval.
+</Warning>
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.bridge(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    if (error.code === ERROR_CODES.USER_DENIED_ALLOWANCE) {
+      console.log('User rejected token approval');
+    } else if (error.code === ERROR_CODES.ALLOWANCE_SETTING_ERROR) {
+      console.error('Failed to set allowance:', error.message);
+    }
+  }
+}
+```
+
+## Security Considerations
+
+<Warning>
+**Unlimited approvals carry risk.** Only approve `'max'` for trusted contracts and protocols.
+</Warning>
+
+1. **Review contract addresses**: Always verify the token contract and spender addresses.
+
+2. **Prefer minimum**: For maximum security, use `'min'` for each transaction.
+
+3. **Revoke unused approvals**: Periodically revoke old approvals using tools like revoke.cash.
+
+4. **Inform users**: Clearly explain the difference between min/max approvals.
+
+5. **Token-specific limits**: Some tokens have custom approval mechanisms.
+
+## Best Practices
+
+1. **Display full context**: Show chain, token, and amounts clearly.
+
+2. **Persist preferences**: Save user's approval preference (min/max) for better UX.
+
+3. **Explain options**: Help users understand the trade-offs.
+
+4. **Handle errors**: Gracefully handle denial and approval failures.
+
+5. **Show gas costs**: Indicate that approvals require gas.
+
+6. **Batch approvals**: When multiple approvals are needed, show them all before requesting.
+
+## Related Hooks
+
+- [Intent Hook](/api/hooks/intent-hook) - Approve bridge/transfer intents
+- [Swap Intent Hook](/api/hooks/swap-intent-hook) - Approve swap operations

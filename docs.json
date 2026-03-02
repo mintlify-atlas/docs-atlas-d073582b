@@ -1,122 +1,133 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Avail Nexus SDK",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#0066FF",
+    "light": "#3D8AFF",
+    "dark": "#0052CC"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/availproject/nexus-sdk"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/availproject/nexus-sdk"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/initialization",
+              "concepts/intents",
+              "concepts/hooks",
+              "concepts/events"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/bridge",
+              "guides/swap",
+              "guides/execute",
+              "guides/balances",
+              "guides/error-handling"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Advanced",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "advanced/analytics",
+              "advanced/optimizations",
+              "advanced/network-config"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core API",
             "pages": [
-              "api-reference/introduction"
+              "api/nexus-sdk",
+              "api/initialization",
+              "api/balance-operations",
+              "api/bridge-operations",
+              "api/swap-operations",
+              "api/execute-operations",
+              "api/intent-management"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Hooks & Events",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/hooks/intent-hook",
+              "api/hooks/allowance-hook",
+              "api/hooks/swap-intent-hook",
+              "api/events/bridge-steps",
+              "api/events/swap-steps"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/parameters",
+              "api/types/results",
+              "api/types/intents",
+              "api/types/errors"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities/formatting",
+              "api/utilities/address",
+              "api/utilities/chain-info"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": [
+              "resources/supported-networks",
+              "resources/supported-tokens",
+              "resources/error-codes",
+              "resources/constants"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/basic-bridge",
+              "examples/swap-exact-in",
+              "examples/swap-exact-out",
+              "examples/bridge-and-execute",
+              "examples/progress-ui"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

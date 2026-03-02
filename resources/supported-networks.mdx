@@ -1,0 +1,398 @@
+---
+title: Supported Networks
+description: Complete list of supported blockchain networks in the Avail Nexus SDK
+icon: network-wired
+---
+
+The Avail Nexus SDK supports a wide range of EVM-compatible networks across both mainnet and testnet environments. Each network has specific capabilities for bridging and swapping operations.
+
+## Mainnet Networks
+
+The following networks are supported on mainnet:
+
+<AccordionGroup>
+  <Accordion title="Ethereum (Chain ID: 1)" icon="ethereum">
+    **Network Details**
+    - **Chain ID**: 1
+    - **Native Token**: ETH (18 decimals)
+    - **Short Name**: eth
+    - **RPC URL**: https://eth.merkle.io
+    - **Block Explorer**: https://etherscan.io
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - ETH (Native)
+    - USDC: `0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48`
+    - USDT: `0xdac17f958d2ee523a2206206994597c13d831ec7`
+  </Accordion>
+
+  <Accordion title="Base (Chain ID: 8453)" icon="square">
+    **Network Details**
+    - **Chain ID**: 8453
+    - **Native Token**: ETH (18 decimals)
+    - **Short Name**: base
+    - **RPC URL**: https://mainnet.base.org
+    - **Block Explorer**: https://basescan.org
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ✅ Supported
+    
+    **Supported Tokens**
+    - ETH (Native)
+    - USDC: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
+  </Accordion>
+
+  <Accordion title="Arbitrum One (Chain ID: 42161)" icon="layer-group">
+    **Network Details**
+    - **Chain ID**: 42161
+    - **Native Token**: ETH (18 decimals)
+    - **Short Name**: arb1
+    - **RPC URL**: https://arb-mainnet.g.alchemy.com/v2/PfaswrKq0rjOrfYWHfE9uLQKhiD4JCdq
+    - **Block Explorer**: https://arbiscan.io
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ✅ Supported
+    
+    **Supported Tokens**
+    - ETH (Native)
+    - USDC: `0xaf88d065e77c8cc2239327c5edb3a432268e5831`
+    - USDT: `0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9`
+  </Accordion>
+
+  <Accordion title="Optimism (Chain ID: 10)" icon="circle-o">
+    **Network Details**
+    - **Chain ID**: 10
+    - **Native Token**: ETH (18 decimals)
+    - **Short Name**: oeth
+    - **RPC URL**: https://mainnet.optimism.io
+    - **Block Explorer**: https://optimistic.etherscan.io
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ✅ Supported
+    
+    **Supported Tokens**
+    - ETH (Native)
+    - USDC: `0x0b2c639c533813f4aa9d7837caf62653d097ff85`
+    - USDT: `0x94b008aa00579c1307b0ef2c499ad98a8ce58e58`
+  </Accordion>
+
+  <Accordion title="Polygon (Chain ID: 137)" icon="square-full">
+    **Network Details**
+    - **Chain ID**: 137
+    - **Native Token**: MATIC (18 decimals)
+    - **Short Name**: matic
+    - **RPC URL**: https://polygon-rpc.com
+    - **Block Explorer**: https://polygonscan.com
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ✅ Supported
+    
+    **Supported Tokens**
+    - MATIC (Native)
+    - USDC: `0x3c499c542cef5e3811e1192ce70d8cc03d5c3359`
+    - USDT: `0xc2132d05d31c914a87c6611c10748aeb04b58e8f`
+  </Accordion>
+
+  <Accordion title="Avalanche (Chain ID: 43114)" icon="mountain">
+    **Network Details**
+    - **Chain ID**: 43114
+    - **Native Token**: AVAX (18 decimals)
+    - **Short Name**: avax
+    - **RPC URL**: https://api.avax.network/ext/bc/C/rpc
+    - **Block Explorer**: https://snowtrace.io
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ✅ Supported
+    
+    **Supported Tokens**
+    - AVAX (Native)
+    - USDC: `0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e`
+    - USDT: `0x9702230a8ea53601f5cd2dc00fdbc13d4df4a8c7`
+  </Accordion>
+
+  <Accordion title="Scroll (Chain ID: 534352)" icon="scroll">
+    **Network Details**
+    - **Chain ID**: 534352
+    - **Native Token**: ETH (18 decimals)
+    - **Short Name**: scroll
+    - **RPC URL**: https://rpc.scroll.io
+    - **Block Explorer**: https://scrollscan.com
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ✅ Supported
+    
+    **Supported Tokens**
+    - ETH (Native)
+    - USDC: `0x06efdbff2a14a7c8e15944d1f4a48f9f95f663a4`
+    - USDT: `0xf55bec9cafdbe8730f096aa55dad6d22d44099df`
+  </Accordion>
+
+  <Accordion title="BNB Smart Chain (Chain ID: 56)" icon="coins">
+    **Network Details**
+    - **Chain ID**: 56
+    - **Native Token**: BNB (18 decimals)
+    - **Short Name**: bnb
+    - **RPC URL**: https://bsc-pokt.nodies.app
+    - **Block Explorer**: https://bscscan.com
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ✅ Supported
+    
+    **Supported Tokens**
+    - BNB (Native)
+    - USDC: `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d`
+    - USDT: `0x55d398326f99059fF775485246999027B3197955`
+  </Accordion>
+
+  <Accordion title="Kaia Mainnet (Chain ID: 8217)" icon="k">
+    **Network Details**
+    - **Chain ID**: 8217
+    - **Native Token**: KAIA (18 decimals)
+    - **Short Name**: kaia
+    - **RPC URL**: https://public-en.node.kaia.io
+    - **Block Explorer**: https://kaiascan.io
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - KAIA (Native)
+    - USDT: `0xd077a400968890eacc75cdc901f0356c943e4fdb`
+  </Accordion>
+
+  <Accordion title="Citrea Mainnet (Chain ID: 4114)" icon="c">
+    **Network Details**
+    - **Chain ID**: 4114
+    - **Native Token**: cBTC (18 decimals)
+    - **Short Name**: citrea
+    - **RPC URL**: https://rpcs.avail.so/citrea
+    - **Block Explorer**: https://explorer.mainnet.citrea.xyz
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - cBTC (Native)
+    - USDC: `0xE045e6c36cF77FAA2CfB54466D71A3aEF7bbE839`
+    - USDT: `0x9f3096Bac87e7F03DC09b0B416eB0DF837304dc4`
+  </Accordion>
+
+  <Accordion title="Monad (Chain ID: 143)" icon="m">
+    **Network Details**
+    - **Chain ID**: 143
+    - **Native Token**: MON (18 decimals)
+    - **Short Name**: monad
+    - **RPC URL**: https://rpcs.avail.so/monad
+    - **Block Explorer**: https://monadvision.com
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - MON (Native)
+    - USDC: `0x754704Bc059F8C67012fEd69BC8A327a5aafb603`
+  </Accordion>
+
+  <Accordion title="Hyper EVM (Chain ID: 999)" icon="h">
+    **Network Details**
+    - **Chain ID**: 999
+    - **Native Token**: HYPE (18 decimals)
+    - **Short Name**: hyperliquid
+    - **RPC URL**: https://rpc.hyperliquid.xyz/evm
+    - **Block Explorer**: https://hyperevmscan.io/
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - HYPE (Native)
+    - USDC: `0xb88339CB7199b77E23DB6E890353E22632Ba630f`
+    - USDT: `0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb`
+  </Accordion>
+
+  <Accordion title="MegaETH (Chain ID: 4326)" icon="m">
+    **Network Details**
+    - **Chain ID**: 4326
+    - **Native Token**: ETH (18 decimals)
+    - **Short Name**: megaETH
+    - **RPC URL**: https://rpcs.avail.so/megaeth
+    - **Block Explorer**: https://megaeth.blockscout.com/
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - ETH (Native)
+    - USDT: `0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb`
+    - USDM: `0xFAfDdbb3FC7688494971a79cc65DCa3EF82079E7`
+  </Accordion>
+</AccordionGroup>
+
+## Testnet Networks
+
+The following networks are supported on testnet for development and testing:
+
+<AccordionGroup>
+  <Accordion title="Sepolia (Chain ID: 11155111)" icon="ethereum">
+    **Network Details**
+    - **Chain ID**: 11155111
+    - **Native Token**: ETH (18 decimals)
+    - **Short Name**: sepolia
+    - **RPC URL**: https://sepolia.drpc.org
+    - **Block Explorer**: https://sepolia.etherscan.io
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - ETH (Native)
+    - USDC: `0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238`
+  </Accordion>
+
+  <Accordion title="Base Sepolia (Chain ID: 84532)" icon="square">
+    **Network Details**
+    - **Chain ID**: 84532
+    - **Native Token**: ETH (18 decimals)
+    - **Short Name**: base-sepolia
+    - **RPC URL**: https://sepolia.base.org
+    - **Block Explorer**: https://sepolia.basescan.org
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - ETH (Native)
+    - USDC: `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
+  </Accordion>
+
+  <Accordion title="Arbitrum Sepolia (Chain ID: 421614)" icon="layer-group">
+    **Network Details**
+    - **Chain ID**: 421614
+    - **Native Token**: ETH (18 decimals)
+    - **Short Name**: arb-sepolia
+    - **RPC URL**: https://sepolia-rollup.arbitrum.io/rpc
+    - **Block Explorer**: https://sepolia.arbiscan.io
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - ETH (Native)
+    - USDC: `0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d`
+    - USDT: `0xF954d4A5859b37De88a91bdbb8Ad309056FB04B1`
+  </Accordion>
+
+  <Accordion title="Optimism Sepolia (Chain ID: 11155420)" icon="circle-o">
+    **Network Details**
+    - **Chain ID**: 11155420
+    - **Native Token**: ETH (18 decimals)
+    - **Short Name**: op-sepolia
+    - **RPC URL**: https://sepolia.optimism.io
+    - **Block Explorer**: https://sepolia-optimism.etherscan.io
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - ETH (Native)
+    - USDC: `0x5fd84259d66Cd46123540766Be93DFE6D43130D7`
+    - USDT: `0x6462693c2F21AC0E517f12641D404895030F7426`
+  </Accordion>
+
+  <Accordion title="Polygon Amoy (Chain ID: 80002)" icon="square-full">
+    **Network Details**
+    - **Chain ID**: 80002
+    - **Native Token**: MATIC (18 decimals)
+    - **Short Name**: amoy
+    - **RPC URL**: https://rpc-amoy.polygon.technology
+    - **Block Explorer**: https://amoy.polygonscan.com
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - MATIC (Native)
+    - USDC: `0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582`
+  </Accordion>
+
+  <Accordion title="Monad Testnet (Chain ID: 10143)" icon="m">
+    **Network Details**
+    - **Chain ID**: 10143
+    - **Native Token**: MON (18 decimals)
+    - **Short Name**: monad-testnet
+    - **RPC URL**: https://testnet-rpc.monad.xyz/
+    - **Block Explorer**: https://testnet.monadexplorer.com/
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - MON (Native)
+    - USDC: `0xf817257fed379853cDe0fa4F97AB987181B1E5Ea`
+    - USDT: `0x1c56F176D6735888fbB6f8bD9ADAd8Ad7a023a0b`
+  </Accordion>
+
+  <Accordion title="Citrea Testnet (Chain ID: 5115)" icon="c">
+    **Network Details**
+    - **Chain ID**: 5115
+    - **Native Token**: cBTC (18 decimals)
+    - **Short Name**: CitreaTestnet
+    - **RPC URL**: https://rpcs.avail.so/citrea-testnet
+    - **Block Explorer**: https://explorer.testnet.citrea.xyz
+    
+    **Capabilities**
+    - Bridge: ✅ Supported
+    - Swap: ❌ Not supported
+    
+    **Supported Tokens**
+    - cBTC (Native)
+    - USDC: `0xb669dC8cC6D044307Ba45366C0c836eC3c7e31AA`
+  </Accordion>
+</AccordionGroup>
+
+## Programmatic Access
+
+You can access network information programmatically using the SDK constants:
+
+```typescript
+import { 
+  SUPPORTED_CHAINS,
+  MAINNET_CHAIN_IDS,
+  TESTNET_CHAIN_IDS,
+  CHAIN_METADATA 
+} from '@avail-project/nexus-core';
+
+// Access specific chain IDs
+console.log(MAINNET_CHAIN_IDS.ETHEREUM); // 1
+console.log(MAINNET_CHAIN_IDS.BASE); // 8453
+
+// Get chain metadata
+const ethMetadata = CHAIN_METADATA[1];
+console.log(ethMetadata.name); // "Ethereum"
+console.log(ethMetadata.nativeCurrency); // { name: "Ether", symbol: "ETH", decimals: 18 }
+```
+
+<Info>
+  All networks support native token transfers and bridging. Swap functionality is only available on select networks as indicated in the tables above.
+</Info>

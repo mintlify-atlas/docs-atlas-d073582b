@@ -1,0 +1,391 @@
+---
+title: 'Swap Intent Hook'
+description: 'Review and approve swap operations before execution'
+---
+
+## Overview
+
+The Swap Intent Hook is called when user approval is needed for a swap operation. This hook allows users to review source and destination tokens, amounts, chains, and gas before approving or denying the swap.
+
+<Info>
+The Swap Intent Hook is **required** for all swap operations (`swapWithExactIn`, `swapWithExactOut`). Without setting this hook, swap operations will fail.
+</Info>
+
+## Hook Signature
+
+```typescript
+type OnSwapIntentHook = (data: OnSwapIntentHookData) => unknown;
+
+type OnSwapIntentHookData = {
+  allow: () => void;
+  deny: () => void;
+  intent: SwapIntent;
+  refresh: () => Promise<SwapIntent>;
+};
+```
+
+## Setting the Hook
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+
+sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Display swap details to user
+  console.log('Swap from:', intent.sources);
+  console.log('Swap to:', intent.destination);
+  console.log('Gas:', intent.destination.gas);
+
+  if (userApproves) {
+    allow();
+  } else {
+    deny();
+  }
+});
+```
+
+## Parameters
+
+### `allow()`
+
+Approve the swap intent and proceed with the operation.
+
+<ParamField path="allow" type="() => void" required>
+  Callback function to approve the swap. Call this when the user confirms they want to proceed.
+</ParamField>
+
+### `deny()`
+
+Reject the swap intent and cancel the operation.
+
+<ParamField path="deny" type="() => void" required>
+  Callback function to reject the swap. Throws a `USER_DENIED_INTENT` error when called.
+</ParamField>
+
+### `intent`
+
+The swap intent details for user review.
+
+<ParamField path="intent" type="SwapIntent" required>
+  Complete swap information including sources, destination, and gas details.
+</ParamField>
+
+### `refresh()`
+
+Refresh the swap intent to get updated quotes and rates.
+
+<ParamField path="refresh" type="() => Promise<SwapIntent>" required>
+  Function to refresh the swap quote. Returns updated `SwapIntent` with current market rates.
+</ParamField>
+
+## SwapIntent Structure
+
+<ResponseField name="destination" type="object" required>
+  Destination details for the swap.
+  
+  <Expandable title="Destination properties">
+    <ResponseField name="amount" type="string" required>
+      Output amount (human-readable)
+    </ResponseField>
+    
+    <ResponseField name="chain" type="object" required>
+      Destination chain information.
+      <Expandable title="Chain properties">
+        <ResponseField name="id" type="number">Chain ID</ResponseField>
+        <ResponseField name="name" type="string">Chain name</ResponseField>
+        <ResponseField name="logo" type="string">Chain logo URL</ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="token" type="object" required>
+      Destination token information.
+      <Expandable title="Token properties">
+        <ResponseField name="contractAddress" type="Hex">Token contract address</ResponseField>
+        <ResponseField name="decimals" type="number">Token decimals</ResponseField>
+        <ResponseField name="symbol" type="string">Token symbol</ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="gas" type="object" required>
+      Gas details for destination chain.
+      <Expandable title="Gas properties">
+        <ResponseField name="amount" type="string">Gas amount (human-readable)</ResponseField>
+        <ResponseField name="token" type="object">
+          Native gas token information.
+          <Expandable title="Gas token properties">
+            <ResponseField name="contractAddress" type="Hex">Gas token address</ResponseField>
+            <ResponseField name="decimals" type="number">Gas token decimals</ResponseField>
+            <ResponseField name="symbol" type="string">Gas token symbol</ResponseField>
+          </Expandable>
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sources" type="array" required>
+  Array of source tokens being swapped.
+  
+  <Expandable title="Source properties">
+    <ResponseField name="amount" type="string">Input amount (human-readable)</ResponseField>
+    
+    <ResponseField name="chain" type="object">
+      Source chain information.
+      <Expandable title="Chain properties">
+        <ResponseField name="id" type="number">Chain ID</ResponseField>
+        <ResponseField name="name" type="string">Chain name</ResponseField>
+        <ResponseField name="logo" type="string">Chain logo URL</ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="token" type="object">
+      Source token information.
+      <Expandable title="Token properties">
+        <ResponseField name="contractAddress" type="Hex">Token contract address</ResponseField>
+        <ResponseField name="decimals" type="number">Token decimals</ResponseField>
+        <ResponseField name="symbol" type="string">Token symbol</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic Usage
+
+```typescript
+sdk.setOnSwapIntentHook(({ intent, allow, deny }) => {
+  // Calculate total input
+  const totalInput = intent.sources.reduce((sum, source) => {
+    return sum + parseFloat(source.amount);
+  }, 0);
+
+  const confirmed = window.confirm(
+    `Swap ${totalInput} from ${intent.sources.length} chain(s)\n` +
+    `to ${intent.destination.amount} ${intent.destination.token.symbol} on ${intent.destination.chain.name}?`
+  );
+
+  if (confirmed) {
+    allow();
+  } else {
+    deny();
+  }
+});
+```
+
+### With UI Framework (React)
+
+```typescript
+import { useState } from 'react';
+import { type SwapIntent } from '@avail-project/nexus-core';
+
+function SwapComponent() {
+  const [intent, setIntent] = useState<SwapIntent | null>(null);
+  const [callbacks, setCallbacks] = useState<{
+    allow: () => void;
+    deny: () => void;
+    refresh: () => Promise<SwapIntent>;
+  } | null>(null);
+
+  const sdk = new NexusSDK({ network: 'mainnet' });
+
+  sdk.setOnSwapIntentHook(({ intent, allow, deny, refresh }) => {
+    setIntent(intent);
+    setCallbacks({ allow, deny, refresh });
+  });
+
+  const handleRefresh = async () => {
+    if (callbacks) {
+      const refreshedIntent = await callbacks.refresh();
+      setIntent(refreshedIntent);
+    }
+  };
+
+  return (
+    <div>
+      {intent && (
+        <div className="swap-review">
+          <h3>Review Swap</h3>
+          
+          <div className="swap-sources">
+            <h4>From:</h4>
+            {intent.sources.map((source, i) => (
+              <div key={i} className="source-item">
+                <img src={source.token.contractAddress} alt={source.token.symbol} />
+                <span>
+                  {source.amount} {source.token.symbol} on {source.chain.name}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="swap-arrow">↓</div>
+
+          <div className="swap-destination">
+            <h4>To:</h4>
+            <div className="destination-item">
+              <img src={intent.destination.token.contractAddress} alt={intent.destination.token.symbol} />
+              <span>
+                {intent.destination.amount} {intent.destination.token.symbol} on {intent.destination.chain.name}
+              </span>
+            </div>
+          </div>
+
+          <div className="gas-info">
+            <p>Gas: {intent.destination.gas.amount} {intent.destination.gas.token.symbol}</p>
+          </div>
+
+          <div className="actions">
+            <button onClick={handleRefresh}>Refresh Quote</button>
+            <button onClick={() => callbacks?.allow()}>Approve</button>
+            <button onClick={() => callbacks?.deny()}>Reject</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### Refreshing Quotes
+
+```typescript
+sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+  console.log('Initial quote:', intent.destination.amount);
+
+  // Wait 5 seconds and refresh
+  await new Promise(resolve => setTimeout(resolve, 5000));
+  
+  const refreshedIntent = await refresh();
+  console.log('Updated quote:', refreshedIntent.destination.amount);
+
+  // Check if quote improved
+  const oldAmount = parseFloat(intent.destination.amount);
+  const newAmount = parseFloat(refreshedIntent.destination.amount);
+  
+  if (newAmount > oldAmount) {
+    console.log('Quote improved!');
+  } else {
+    console.log('Quote stayed the same or got worse');
+  }
+
+  allow();
+});
+```
+
+### Cross-Chain Swap Display
+
+```typescript
+sdk.setOnSwapIntentHook(({ intent, allow, deny }) => {
+  const isCrossChain = intent.sources.some(
+    source => source.chain.id !== intent.destination.chain.id
+  );
+
+  console.log(`${isCrossChain ? 'Cross-chain' : 'Same-chain'} swap`);
+  
+  if (isCrossChain) {
+    console.log('Source chains:');
+    intent.sources.forEach(source => {
+      console.log(`  - ${source.chain.name} (ID: ${source.chain.id})`);
+    });
+    console.log(`Destination: ${intent.destination.chain.name} (ID: ${intent.destination.chain.id})`);
+  }
+
+  allow();
+});
+```
+
+### Calculating Exchange Rate
+
+```typescript
+sdk.setOnSwapIntentHook(({ intent, allow }) => {
+  // Calculate total input value
+  const totalInput = intent.sources.reduce((sum, source) => {
+    return sum + parseFloat(source.amount);
+  }, 0);
+
+  const outputAmount = parseFloat(intent.destination.amount);
+  const exchangeRate = outputAmount / totalInput;
+
+  console.log(`Exchange rate: 1 ${intent.sources[0].token.symbol} = ${exchangeRate} ${intent.destination.token.symbol}`);
+
+  allow();
+});
+```
+
+### Price Impact Warning
+
+```typescript
+sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Get fresh quote
+  const freshIntent = await refresh();
+  
+  const expectedOutput = parseFloat(intent.destination.amount);
+  const actualOutput = parseFloat(freshIntent.destination.amount);
+  const priceImpact = ((expectedOutput - actualOutput) / expectedOutput) * 100;
+
+  if (priceImpact > 5) {
+    const confirmed = window.confirm(
+      `WARNING: Price has moved ${priceImpact.toFixed(2)}% against you. Continue?`
+    );
+    if (!confirmed) {
+      deny();
+      return;
+    }
+  }
+
+  allow();
+});
+```
+
+## Error Handling
+
+<Warning>
+Calling `deny()` throws a `NexusError` with code `USER_DENIED_INTENT`. This is expected behavior and should not be treated as an error in your UI.
+</Warning>
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.swapWithExactIn(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    if (error.code === ERROR_CODES.USER_DENIED_INTENT) {
+      console.log('User cancelled the swap');
+    } else if (error.code === ERROR_CODES.SWAP_FAILED) {
+      console.error('Swap failed:', error.message);
+    } else if (error.code === ERROR_CODES.RATES_CHANGED_BEYOND_TOLERANCE) {
+      console.error('Price moved too much, please retry');
+    }
+  }
+}
+```
+
+## Best Practices
+
+1. **Show exchange rates**: Calculate and display the rate between input and output tokens.
+
+2. **Display gas costs**: Show the gas amount that will be supplied to the destination chain.
+
+3. **Refresh quotes**: Use `refresh()` to get updated prices, especially for large swaps or after delays.
+
+4. **Cross-chain indicators**: Clearly show when swapping between different chains.
+
+5. **Price impact warnings**: Alert users to significant price movements.
+
+6. **Source breakdown**: When swapping from multiple chains, show each source clearly.
+
+7. **Handle denials gracefully**: Don't show error messages when users cancel.
+
+8. **Async operations**: The hook can be async for UI operations before calling `allow()` or `deny()`.
+
+## Related Hooks
+
+- [Intent Hook](/api/hooks/intent-hook) - Approve bridge/transfer intents
+- [Allowance Hook](/api/hooks/allowance-hook) - Approve token allowances
+
+## Related Events
+
+- [Swap Steps](/api/events/swap-steps) - Track swap operation progress

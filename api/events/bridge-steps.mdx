@@ -1,0 +1,437 @@
+---
+title: 'Bridge Steps'
+description: 'Track bridge operation progress with step-by-step events'
+---
+
+## Overview
+
+Bridge operations emit step-by-step progress events through the `onEvent` callback. These events allow you to build real-time progress UIs, track transaction status, and provide users with detailed feedback during bridge, transfer, and execute operations.
+
+## Event Callback
+
+```typescript
+import { NEXUS_EVENTS, type BridgeStepType } from '@avail-project/nexus-core';
+
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+      // Emitted once at start with all steps
+      const allSteps: BridgeStepType[] = event.args;
+      console.log('Total steps:', allSteps.length);
+    }
+
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      // Emitted as each step completes
+      const completedStep: BridgeStepType = event.args;
+      console.log('Completed:', completedStep.type);
+    }
+  },
+});
+```
+
+## Event Types
+
+### `STEPS_LIST`
+
+Emitted once at the start of an operation with all expected steps.
+
+<ParamField path="event.name" type="'STEPS_LIST'">
+  Event name constant from `NEXUS_EVENTS.STEPS_LIST`
+</ParamField>
+
+<ParamField path="event.args" type="BridgeStepType[]">
+  Array of all steps that will be executed during this operation
+</ParamField>
+
+### `STEP_COMPLETE`
+
+Emitted each time a step completes successfully.
+
+<ParamField path="event.name" type="'STEP_COMPLETE'">
+  Event name constant from `NEXUS_EVENTS.STEP_COMPLETE`
+</ParamField>
+
+<ParamField path="event.args" type="BridgeStepType">
+  The step that just completed
+</ParamField>
+
+## Bridge Step Types
+
+All bridge steps follow this structure:
+
+```typescript
+type BridgeStepType = {
+  type: string;   // Step type name
+  typeID: string; // Unique identifier
+  data?: {        // Additional step-specific data
+    chainID?: number;
+    chainName?: string;
+    amount?: string;
+    explorerURL?: string;
+    intentID?: number;
+    txHash?: Hex;
+  };
+};
+```
+
+## Step Reference
+
+### Intent Steps
+
+<ResponseField name="INTENT_ACCEPTED" type="IA">
+  Intent created and accepted by solver.
+  
+  **When**: After intent is validated and accepted by the Avail solver network.
+</ResponseField>
+
+<ResponseField name="INTENT_HASH_SIGNED" type="IHS">
+  User signed the intent hash.
+  
+  **When**: After user signs the intent message in their wallet.
+</ResponseField>
+
+<ResponseField name="INTENT_SUBMITTED" type="IS">
+  Intent submitted to the network.
+  
+  **Data**:
+  - `explorerURL` - Link to view intent on explorer
+  - `intentID` - Unique intent identifier
+  
+  **When**: After intent is submitted to the Avail network.
+</ResponseField>
+
+<ResponseField name="INTENT_FULFILLED" type="IF">
+  Intent fulfilled by solver.
+  
+  **When**: After solver fulfills the intent and funds arrive at destination.
+</ResponseField>
+
+### Allowance Steps
+
+<ResponseField name="ALLOWANCE_USER_APPROVAL" type="AUA_{chainId}">
+  Waiting for user to approve token allowance.
+  
+  **Data**:
+  - `chainID` - Chain requiring approval
+  - `chainName` - Chain name
+  
+  **When**: Before requesting approval transaction from user.
+  
+  **Note**: `typeID` includes chain ID (e.g., `AUA_1` for Ethereum).
+</ResponseField>
+
+<ResponseField name="ALLOWANCE_APPROVAL_MINED" type="AAM_{chainId}">
+  Allowance approval transaction mined.
+  
+  **Data**:
+  - `chainID` - Chain where approval was mined
+  - `chainName` - Chain name
+  
+  **When**: After approval transaction is confirmed on-chain.
+  
+  **Note**: `typeID` includes chain ID (e.g., `AAM_1` for Ethereum).
+</ResponseField>
+
+<ResponseField name="ALLOWANCE_ALL_DONE" type="AAD">
+  All allowance approvals completed.
+  
+  **When**: After all required token approvals are confirmed.
+</ResponseField>
+
+### Deposit Steps
+
+<ResponseField name="INTENT_DEPOSIT" type="ID_{index}">
+  Deposit initiated on source chain.
+  
+  **Data**:
+  - `amount` - Deposit amount (human-readable)
+  - `chainID` - Source chain ID
+  - `chainName` - Source chain name
+  
+  **When**: User initiates deposit on a source chain.
+  
+  **Note**: `typeID` includes deposit index (e.g., `ID_0`, `ID_1` for multiple sources).
+</ResponseField>
+
+<ResponseField name="INTENT_DEPOSITS_CONFIRMED" type="UIDC">
+  All deposits confirmed.
+  
+  **When**: After all source chain deposits are confirmed.
+</ResponseField>
+
+### Collection Steps
+
+<ResponseField name="INTENT_COLLECTION" type="IC_{index}">
+  Collecting funds from source chain.
+  
+  **Data**:
+  - `confirmed` - Number of collections confirmed
+  - `total` - Total collections expected
+  - `txHash` - Collection transaction hash
+  - `explorerUrl` - Transaction explorer URL
+  
+  **When**: Solver collects deposited funds from source chain.
+  
+  **Note**: `typeID` includes collection index.
+</ResponseField>
+
+<ResponseField name="INTENT_COLLECTION_COMPLETE" type="ICC">
+  All funds collected from source chains.
+  
+  **When**: After solver has collected all deposits.
+</ResponseField>
+
+### Execution Steps
+
+<ResponseField name="APPROVAL" type="AP">
+  Token approval for contract execution.
+  
+  **When**: During `execute()` or `bridgeAndExecute()` when token approval is needed.
+</ResponseField>
+
+<ResponseField name="TRANSACTION_SENT" type="TS">
+  Execute transaction sent to network.
+  
+  **When**: After execute transaction is broadcast to the network.
+</ResponseField>
+
+<ResponseField name="TRANSACTION_CONFIRMED" type="CN">
+  Execute transaction confirmed on-chain.
+  
+  **When**: After execute transaction is mined and confirmed.
+</ResponseField>
+
+## Examples
+
+### Basic Progress Tracking
+
+```typescript
+import { NEXUS_EVENTS, type BridgeStepType } from '@avail-project/nexus-core';
+
+let steps: BridgeStepType[] = [];
+let completedSteps: Set<string> = new Set();
+
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+      steps = event.args;
+      console.log(`Starting bridge with ${steps.length} steps`);
+    }
+
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      completedSteps.add(event.args.typeID);
+      const progress = (completedSteps.size / steps.length) * 100;
+      console.log(`Progress: ${progress.toFixed(0)}%`);
+    }
+  },
+});
+```
+
+### Progress Bar UI
+
+```typescript
+function renderProgress() {
+  steps.forEach((step, index) => {
+    const isComplete = completedSteps.has(step.typeID);
+    const isCurrent = index === completedSteps.size;
+    const status = isComplete ? '✓' : isCurrent ? '●' : '○';
+    console.log(`${status} ${step.type}`);
+  });
+}
+
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+      steps = event.args;
+      renderProgress();
+    }
+
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      completedSteps.add(event.args.typeID);
+      renderProgress();
+    }
+  },
+});
+```
+
+### React Progress Component
+
+```typescript
+import { useState } from 'react';
+import { NEXUS_EVENTS, type BridgeStepType } from '@avail-project/nexus-core';
+
+function BridgeProgress() {
+  const [steps, setSteps] = useState<BridgeStepType[]>([]);
+  const [completed, setCompleted] = useState<Set<string>>(new Set());
+
+  const handleBridge = async () => {
+    await sdk.bridge(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+          setSteps(event.args);
+        }
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          setCompleted(prev => new Set([...prev, event.args.typeID]));
+        }
+      },
+    });
+  };
+
+  const progress = steps.length > 0 ? (completed.size / steps.length) * 100 : 0;
+
+  return (
+    <div>
+      <div className="progress-bar">
+        <div className="progress-fill" style={{ width: `${progress}%` }} />
+      </div>
+      
+      <div className="steps-list">
+        {steps.map((step, index) => {
+          const isComplete = completed.has(step.typeID);
+          const isCurrent = index === completed.size;
+          
+          return (
+            <div 
+              key={step.typeID}
+              className={`step ${isComplete ? 'complete' : ''} ${isCurrent ? 'current' : ''}`}
+            >
+              <span className="step-icon">
+                {isComplete ? '✓' : isCurrent ? '●' : '○'}
+              </span>
+              <span className="step-name">{step.type}</span>
+              {step.data?.explorerURL && (
+                <a href={step.data.explorerURL} target="_blank" rel="noopener noreferrer">
+                  View Transaction
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+```
+
+### Detailed Step Information
+
+```typescript
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      const step = event.args;
+      
+      switch (step.type) {
+        case 'INTENT_SUBMITTED':
+          console.log('Intent submitted!');
+          console.log('Intent ID:', step.data?.intentID);
+          console.log('Explorer:', step.data?.explorerURL);
+          break;
+          
+        case 'INTENT_DEPOSIT':
+          console.log('Depositing:', step.data?.amount);
+          console.log('On chain:', step.data?.chainName);
+          break;
+          
+        case 'INTENT_COLLECTION':
+          console.log('Collection progress:', step.data?.confirmed, '/', step.data?.total);
+          console.log('TX:', step.data?.explorerUrl);
+          break;
+          
+        case 'TRANSACTION_CONFIRMED':
+          console.log('Bridge complete!');
+          break;
+      }
+    }
+  },
+});
+```
+
+### Multi-Chain Source Tracking
+
+```typescript
+const sourceDeposits = new Map<number, string>();
+
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      const step = event.args;
+      
+      if (step.type === 'INTENT_DEPOSIT' && step.data) {
+        sourceDeposits.set(step.data.chainID!, step.data.amount!);
+        console.log('Deposits by chain:');
+        sourceDeposits.forEach((amount, chainId) => {
+          console.log(`  Chain ${chainId}: ${amount}`);
+        });
+      }
+    }
+  },
+});
+```
+
+### Explorer Links
+
+```typescript
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      const step = event.args;
+      
+      if (step.data?.explorerURL) {
+        console.log(`View on explorer: ${step.data.explorerURL}`);
+        // Show clickable link in UI
+        showNotification({
+          message: 'Transaction confirmed',
+          action: {
+            label: 'View',
+            url: step.data.explorerURL,
+          },
+        });
+      }
+    }
+  },
+});
+```
+
+### Time Tracking
+
+```typescript
+const stepTimes = new Map<string, number>();
+let startTime: number;
+
+sdk.bridge(params, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+      startTime = Date.now();
+    }
+
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      const elapsed = Date.now() - startTime;
+      stepTimes.set(event.args.type, elapsed);
+      console.log(`${event.args.type} completed in ${elapsed}ms`);
+    }
+  },
+});
+```
+
+## Best Practices
+
+1. **Initialize UI early**: Use `STEPS_LIST` to set up your progress UI before any steps complete.
+
+2. **Use typeID for tracking**: The `typeID` is unique per step, ideal for keys and tracking completion.
+
+3. **Show explorer links**: Display `explorerURL` when available so users can verify transactions.
+
+4. **Handle dynamic steps**: Some operations may have different numbers of steps depending on source chains.
+
+5. **Provide context**: Use `step.data` to show relevant details (amounts, chains, etc.).
+
+6. **Track progress percentage**: Calculate `(completed / total) * 100` for progress bars.
+
+7. **Highlight current step**: Show which step is currently in progress, not just completed ones.
+
+8. **Persist state**: Consider persisting step state in case of page refresh during long operations.
+
+## Related Events
+
+- [Swap Steps](/api/events/swap-steps) - Track swap operation progress

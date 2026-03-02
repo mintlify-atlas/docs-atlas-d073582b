@@ -1,0 +1,570 @@
+---
+title: 'Chain Information'
+description: 'Access chain metadata and supported networks'
+icon: 'network-wired'
+---
+
+## Overview
+
+The Nexus SDK provides comprehensive chain metadata and utilities to query supported networks and tokens.
+
+## getSupportedChains
+
+Get all supported chains and tokens for a specific network environment.
+
+```typescript
+import { getSupportedChains } from '@avail-project/nexus-core';
+
+// Get mainnet chains
+const mainnet = getSupportedChains('mainnet');
+
+// Get testnet chains
+const testnet = getSupportedChains('testnet');
+
+// Via SDK instance
+const chains = sdk.utils.getSupportedChains();
+```
+
+### Parameters
+
+<ParamField path="env" type="'mainnet' | 'testnet'">
+  The network environment. Defaults to SDK's configured network.
+</ParamField>
+
+### Returns
+
+<ResponseField name="result" type="SupportedChainsAndTokensResult">
+  <ParamField path="chains" type="Chain[]">
+    Array of supported chains with metadata
+  </ParamField>
+  
+  <ParamField path="tokens" type="TokenInfo[]">
+    Array of supported tokens across chains
+  </ParamField>
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+```typescript Get All Chains
+import { getSupportedChains } from '@avail-project/nexus-core';
+
+const { chains, tokens } = getSupportedChains('mainnet');
+
+chains.forEach(chain => {
+  console.log(`${chain.name} (ID: ${chain.id})`);
+  console.log(`Native: ${chain.nativeCurrency.symbol}`);
+  console.log(`Explorer: ${chain.blockExplorers.default.url}`);
+});
+```
+
+```typescript Filter by Swap Support
+import { getSupportedChains } from '@avail-project/nexus-core';
+
+const { chains } = getSupportedChains('mainnet');
+
+const swapChains = chains.filter(chain => chain.swapSupported);
+console.log('Chains with swap support:', swapChains.map(c => c.name));
+// ["Base", "Arbitrum One", "Optimism", "Polygon", ...]
+```
+
+```typescript Build Chain Selector
+import { getSupportedChains } from '@avail-project/nexus-core';
+
+function ChainSelector() {
+  const { chains } = getSupportedChains('mainnet');
+  
+  return (
+    <select>
+      {chains.map(chain => (
+        <option key={chain.id} value={chain.id}>
+          {chain.name} ({chain.nativeCurrency.symbol})
+        </option>
+      ))}
+    </select>
+  );
+}
+```
+</CodeGroup>
+
+---
+
+## CHAIN_METADATA
+
+Static metadata for all supported chains indexed by chain ID.
+
+```typescript
+import { CHAIN_METADATA } from '@avail-project/nexus-core';
+
+const ethereum = CHAIN_METADATA[1];
+console.log(ethereum.name); // "Ethereum"
+console.log(ethereum.nativeCurrency.symbol); // "ETH"
+
+const polygon = CHAIN_METADATA[137];
+console.log(polygon.name); // "Polygon"
+console.log(polygon.shortName); // "matic"
+```
+
+### Structure
+
+<ResponseField name="ChainMetadata" type="object">
+  <ParamField path="id" type="number">
+    Chain ID (e.g., 1 for Ethereum, 137 for Polygon)
+  </ParamField>
+  
+  <ParamField path="name" type="string">
+    Full chain name (e.g., "Ethereum", "Arbitrum One")
+  </ParamField>
+  
+  <ParamField path="shortName" type="string">
+    Short identifier (e.g., "eth", "arb1", "matic")
+  </ParamField>
+  
+  <ParamField path="logo" type="string">
+    Chain logo URL
+  </ParamField>
+  
+  <ParamField path="nativeCurrency" type="object">
+    <ParamField path="name" type="string">
+      Native currency name (e.g., "Ether")
+    </ParamField>
+    <ParamField path="symbol" type="string">
+      Native currency symbol (e.g., "ETH")
+    </ParamField>
+    <ParamField path="decimals" type="number">
+      Decimals (usually 18)
+    </ParamField>
+  </ParamField>
+  
+  <ParamField path="rpcUrls" type="string[]">
+    RPC endpoint URLs
+  </ParamField>
+  
+  <ParamField path="blockExplorerUrls" type="string[]">
+    Block explorer URLs
+  </ParamField>
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+```typescript Get Chain Info
+import { CHAIN_METADATA } from '@avail-project/nexus-core';
+
+function getChainInfo(chainId: number) {
+  const chain = CHAIN_METADATA[chainId];
+  if (!chain) {
+    throw new Error(`Chain ${chainId} not supported`);
+  }
+  return chain;
+}
+
+const base = getChainInfo(8453);
+console.log(base.name); // "Base"
+console.log(base.blockExplorerUrls[0]); // "https://basescan.org"
+```
+
+```typescript Display Chain Badge
+import { CHAIN_METADATA } from '@avail-project/nexus-core';
+
+function ChainBadge({ chainId }: { chainId: number }) {
+  const chain = CHAIN_METADATA[chainId];
+  if (!chain) return null;
+  
+  return (
+    <div className="chain-badge">
+      <img src={chain.logo} alt={chain.name} />
+      <span>{chain.name}</span>
+    </div>
+  );
+}
+```
+
+```typescript Add Network to Wallet
+import { CHAIN_METADATA } from '@avail-project/nexus-core';
+
+async function addChainToWallet(chainId: number) {
+  const chain = CHAIN_METADATA[chainId];
+  if (!chain) throw new Error('Chain not found');
+  
+  await window.ethereum.request({
+    method: 'wallet_addEthereumChain',
+    params: [{
+      chainId: `0x${chainId.toString(16)}`,
+      chainName: chain.name,
+      nativeCurrency: chain.nativeCurrency,
+      rpcUrls: chain.rpcUrls,
+      blockExplorerUrls: chain.blockExplorerUrls,
+    }],
+  });
+}
+```
+</CodeGroup>
+
+---
+
+## TOKEN_METADATA
+
+Metadata for supported tokens across all chains.
+
+```typescript
+import { TOKEN_METADATA } from '@avail-project/nexus-core';
+
+const usdc = TOKEN_METADATA['USDC'];
+console.log(usdc.name); // "USD Coin"
+console.log(usdc.decimals); // 6
+console.log(usdc.icon); // URL to USDC icon
+```
+
+### Structure
+
+<ResponseField name="TokenMetadata" type="object">
+  <ParamField path="symbol" type="string">
+    Token symbol (e.g., "USDC", "ETH", "USDT")
+  </ParamField>
+  
+  <ParamField path="name" type="string">
+    Full token name (e.g., "USD Coin")
+  </ParamField>
+  
+  <ParamField path="decimals" type="number">
+    Decimal places (e.g., 6 for USDC, 18 for ETH)
+  </ParamField>
+  
+  <ParamField path="icon" type="string">
+    Token icon URL
+  </ParamField>
+  
+  <ParamField path="coingeckoId" type="string">
+    CoinGecko API identifier
+  </ParamField>
+  
+  <ParamField path="isNative" type="boolean">
+    Whether this is a native token (true for ETH)
+  </ParamField>
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+```typescript Display Token Info
+import { TOKEN_METADATA } from '@avail-project/nexus-core';
+
+function TokenInfo({ symbol }: { symbol: string }) {
+  const token = TOKEN_METADATA[symbol];
+  if (!token) return null;
+  
+  return (
+    <div className="token-info">
+      <img src={token.icon} alt={symbol} />
+      <div>
+        <div className="symbol">{token.symbol}</div>
+        <div className="name">{token.name}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+```typescript Token Dropdown
+import { TOKEN_METADATA } from '@avail-project/nexus-core';
+
+const SUPPORTED_TOKENS = ['ETH', 'USDC', 'USDT', 'USDM'];
+
+function TokenSelector({ onSelect }: { onSelect: (token: string) => void }) {
+  return (
+    <select onChange={(e) => onSelect(e.target.value)}>
+      {SUPPORTED_TOKENS.map(symbol => {
+        const token = TOKEN_METADATA[symbol];
+        return (
+          <option key={symbol} value={symbol}>
+            {token.name} ({symbol})
+          </option>
+        );
+      })}
+    </select>
+  );
+}
+```
+</CodeGroup>
+
+---
+
+## SUPPORTED_CHAINS
+
+Constants for all supported chain IDs.
+
+```typescript
+import { SUPPORTED_CHAINS } from '@avail-project/nexus-core';
+
+console.log(SUPPORTED_CHAINS.ETHEREUM); // 1
+console.log(SUPPORTED_CHAINS.BASE); // 8453
+console.log(SUPPORTED_CHAINS.ARBITRUM); // 42161
+console.log(SUPPORTED_CHAINS.POLYGON); // 137
+```
+
+### Mainnet Chains
+
+<ResponseField name="SUPPORTED_CHAINS" type="object">
+  <ParamField path="ETHEREUM" type="1">Ethereum Mainnet</ParamField>
+  <ParamField path="BASE" type="8453">Base</ParamField>
+  <ParamField path="ARBITRUM" type="42161">Arbitrum One</ParamField>
+  <ParamField path="OPTIMISM" type="10">Optimism</ParamField>
+  <ParamField path="POLYGON" type="137">Polygon PoS</ParamField>
+  <ParamField path="AVALANCHE" type="43114">Avalanche C-Chain</ParamField>
+  <ParamField path="SCROLL" type="534352">Scroll</ParamField>
+  <ParamField path="KAIA" type="8217">Kaia Mainnet</ParamField>
+  <ParamField path="CITREA" type="4114">Citrea Mainnet</ParamField>
+  <ParamField path="BNB" type="56">BNB Smart Chain</ParamField>
+  <ParamField path="HYPEREVM" type="999">Hyper EVM</ParamField>
+  <ParamField path="MEGAETH" type="4326">MegaETH</ParamField>
+  <ParamField path="MONAD" type="143">Monad</ParamField>
+</ResponseField>
+
+### Testnet Chains
+
+<ResponseField name="SUPPORTED_CHAINS" type="object">
+  <ParamField path="SEPOLIA" type="11155111">Sepolia</ParamField>
+  <ParamField path="BASE_SEPOLIA" type="84532">Base Sepolia</ParamField>
+  <ParamField path="ARBITRUM_SEPOLIA" type="421614">Arbitrum Sepolia</ParamField>
+  <ParamField path="OPTIMISM_SEPOLIA" type="11155420">Optimism Sepolia</ParamField>
+  <ParamField path="POLYGON_AMOY" type="80002">Polygon Amoy</ParamField>
+  <ParamField path="MONAD_TESTNET" type="10143">Monad Testnet</ParamField>
+  <ParamField path="CITREA_TESTNET" type="5115">Citrea Testnet</ParamField>
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+```typescript Type-Safe Chain IDs
+import { SUPPORTED_CHAINS } from '@avail-project/nexus-core';
+
+// Use constants instead of magic numbers
+await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: SUPPORTED_CHAINS.POLYGON,
+});
+
+// Check if chain is supported
+function isSupportedChain(chainId: number): boolean {
+  return Object.values(SUPPORTED_CHAINS).includes(chainId);
+}
+```
+
+```typescript Chain Validation
+import { SUPPORTED_CHAINS } from '@avail-project/nexus-core';
+
+const MAINNET_CHAINS = [
+  SUPPORTED_CHAINS.ETHEREUM,
+  SUPPORTED_CHAINS.BASE,
+  SUPPORTED_CHAINS.ARBITRUM,
+  SUPPORTED_CHAINS.OPTIMISM,
+  SUPPORTED_CHAINS.POLYGON,
+];
+
+function validateChainId(chainId: number) {
+  if (!MAINNET_CHAINS.includes(chainId)) {
+    throw new Error(`Chain ${chainId} not supported`);
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## SDK Utils Instance
+
+The SDK instance provides utility methods for chain queries.
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(window.ethereum);
+
+// Get supported chains
+const chains = sdk.utils.getSupportedChains();
+
+// Check if chain is supported
+const isSupported = sdk.utils.isSupportedChain(137);
+
+// Check if token is supported
+const isTokenSupported = sdk.utils.isSupportedToken('USDC');
+
+// Get swap-supported chains
+const swapChains = sdk.utils.getSwapSupportedChainsAndTokens();
+```
+
+### Available Methods
+
+<ResponseField name="sdk.utils" type="NexusUtils">
+  <ParamField path="getSupportedChains" type="(env?: Network) => SupportedChainsAndTokensResult">
+    Get all supported chains and tokens
+  </ParamField>
+  
+  <ParamField path="isSupportedChain" type="(chainId: number) => boolean">
+    Check if a chain ID is supported
+  </ParamField>
+  
+  <ParamField path="isSupportedToken" type="(token: string) => boolean">
+    Check if a token symbol is supported
+  </ParamField>
+  
+  <ParamField path="getSwapSupportedChainsAndTokens" type="() => SupportedChainsResult">
+    Get chains and tokens that support swap operations
+  </ParamField>
+  
+  <ParamField path="getCoinbaseRates" type="() => Promise<Record<string, string>>">
+    Get current token prices from Coinbase
+  </ParamField>
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+```typescript Chain Validation
+if (!sdk.utils.isSupportedChain(chainId)) {
+  throw new Error(`Chain ${chainId} is not supported`);
+}
+
+if (!sdk.utils.isSupportedToken('CUSTOM')) {
+  throw new Error('Token not supported');
+}
+```
+
+```typescript Get Token Prices
+const rates = await sdk.utils.getCoinbaseRates();
+console.log('ETH Price:', rates.ETH); // "3456.78"
+console.log('USDC Price:', rates.USDC); // "1.00"
+
+// Calculate USD value
+const ethAmount = 1.5;
+const usdValue = ethAmount * parseFloat(rates.ETH);
+console.log(`${ethAmount} ETH = $${usdValue.toFixed(2)}`);
+```
+
+```typescript Swap Chain Selector
+const swapSupported = sdk.utils.getSwapSupportedChainsAndTokens();
+
+function SwapChainSelector() {
+  return (
+    <select>
+      {swapSupported.chains.map(chain => (
+        <option key={chain.id} value={chain.id}>
+          {chain.name} - Swap Available
+        </option>
+      ))}
+    </select>
+  );
+}
+```
+</CodeGroup>
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use constants for chain IDs" icon="hashtag">
+    Always use `SUPPORTED_CHAINS` constants instead of hardcoding chain IDs for better maintainability.
+  </Card>
+
+  <Card title="Validate before operations" icon="shield-check">
+    Use `isSupportedChain()` and `isSupportedToken()` to validate inputs before SDK operations.
+  </Card>
+
+  <Card title="Cache chain metadata" icon="database">
+    `CHAIN_METADATA` and `TOKEN_METADATA` are static - cache them in your app to avoid repeated lookups.
+  </Card>
+
+  <Card title="Display user-friendly names" icon="user">
+    Use `chain.name` from metadata instead of chain IDs when displaying to users.
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+<CodeGroup>
+```typescript Chain Dropdown Component
+import { CHAIN_METADATA, SUPPORTED_CHAINS } from '@avail-project/nexus-core';
+
+const MAINNET_CHAINS = [
+  SUPPORTED_CHAINS.ETHEREUM,
+  SUPPORTED_CHAINS.BASE,
+  SUPPORTED_CHAINS.ARBITRUM,
+  SUPPORTED_CHAINS.POLYGON,
+];
+
+function ChainDropdown({ 
+  value, 
+  onChange 
+}: { 
+  value: number;
+  onChange: (chainId: number) => void;
+}) {
+  return (
+    <select value={value} onChange={e => onChange(Number(e.target.value))}>
+      {MAINNET_CHAINS.map(chainId => {
+        const chain = CHAIN_METADATA[chainId];
+        return (
+          <option key={chainId} value={chainId}>
+            {chain.name}
+          </option>
+        );
+      })}
+    </select>
+  );
+}
+```
+
+```typescript Explorer Link Generator
+import { CHAIN_METADATA } from '@avail-project/nexus-core';
+
+function getExplorerUrl(
+  chainId: number, 
+  type: 'tx' | 'address', 
+  value: string
+): string {
+  const chain = CHAIN_METADATA[chainId];
+  if (!chain) throw new Error('Chain not found');
+  
+  const baseUrl = chain.blockExplorerUrls[0];
+  return `${baseUrl}/${type}/${value}`;
+}
+
+// Usage
+const txUrl = getExplorerUrl(1, 'tx', '0x123...');
+// "https://etherscan.io/tx/0x123..."
+```
+
+```typescript Network Switcher
+import { CHAIN_METADATA } from '@avail-project/nexus-core';
+
+async function switchNetwork(chainId: number) {
+  const chain = CHAIN_METADATA[chainId];
+  if (!chain) throw new Error('Chain not supported');
+  
+  try {
+    await window.ethereum.request({
+      method: 'wallet_switchEthereumChain',
+      params: [{ chainId: `0x${chainId.toString(16)}` }],
+    });
+  } catch (error: any) {
+    // Chain not added, add it first
+    if (error.code === 4902) {
+      await window.ethereum.request({
+        method: 'wallet_addEthereumChain',
+        params: [{
+          chainId: `0x${chainId.toString(16)}`,
+          chainName: chain.name,
+          nativeCurrency: chain.nativeCurrency,
+          rpcUrls: chain.rpcUrls,
+          blockExplorerUrls: chain.blockExplorerUrls,
+        }],
+      });
+    }
+  }
+}
+```
+</CodeGroup>

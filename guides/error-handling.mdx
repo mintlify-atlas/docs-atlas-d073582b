@@ -1,0 +1,623 @@
+---
+title: Error Handling
+description: Comprehensive guide to handling errors and user interactions in the Avail Nexus SDK
+---
+
+The Avail Nexus SDK provides robust error handling with typed errors, user approval hooks, and detailed error context to help you build reliable applications.
+
+## Overview
+
+The SDK uses:
+
+- **`NexusError`** — Typed error class with structured data
+- **`ERROR_CODES`** — Enumeration of all possible error codes
+- **Hooks** — User approval mechanisms for intents and allowances
+- **Event callbacks** — Real-time operation progress tracking
+
+## NexusError Class
+
+All SDK errors are thrown as `NexusError` instances:
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.bridge({
+    token: 'USDC',
+    amount: 1_000_000n,
+    toChainId: 137,
+  });
+} catch (error) {
+  if (error instanceof NexusError) {
+    console.error(`Error Code: ${error.code}`);
+    console.error(`Message: ${error.message}`);
+    console.error(`Context: ${error.data?.context}`);
+    console.error(`Details:`, error.data?.details);
+  }
+}
+```
+
+### NexusError Structure
+
+```typescript
+class NexusError extends Error {
+  readonly code: ErrorCode;  // From ERROR_CODES
+  readonly data?: {
+    context?: string;              // Where/why it happened
+    cause?: unknown;               // Nested error
+    details?: Record<string, unknown>; // Additional info
+  };
+
+  toJSON(): object; // Serializable format for logging
+}
+```
+
+## Error Codes Reference
+
+The SDK defines comprehensive error codes grouped by category:
+
+### User Actions
+
+| Code | Description | Handling |
+|------|-------------|----------|
+| `USER_DENIED_INTENT` | User rejected the intent | Silent - user cancelled |
+| `USER_DENIED_ALLOWANCE` | User rejected token approval | Silent - user cancelled |
+| `USER_DENIED_INTENT_SIGNATURE` | User rejected signature | Silent - user cancelled |
+| `USER_DENIED_SIWE_SIGNATURE` | User rejected SIWE signature | Silent - user cancelled |
+
+### Balance & Funds
+
+| Code | Description | Handling |
+|------|-------------|----------|
+| `INSUFFICIENT_BALANCE` | Not enough tokens | Show balance, suggest deposit |
+| `NO_BALANCE_FOR_ADDRESS` | No balance found | Verify address |
+
+### Validation
+
+| Code | Description | Handling |
+|------|-------------|----------|
+| `INVALID_INPUT` | Invalid parameters | Check input values |
+| `INVALID_ADDRESS_LENGTH` | Wrong address length | Verify address format |
+| `INVALID_VALUES_ALLOWANCE_HOOK` | Invalid allowance values | Check allow() arguments |
+| `TOKEN_NOT_SUPPORTED` | Token not supported | Use supported token |
+
+### Initialization
+
+| Code | Description | Handling |
+|------|-------------|----------|
+| `SDK_NOT_INITIALIZED` | SDK not initialized | Call initialize() first |
+| `SDK_INIT_STATE_NOT_EXPECTED` | Unexpected init state | Re-initialize SDK |
+| `WALLET_NOT_CONNECTED` | No wallet connected | Connect wallet |
+| `CONNECT_ACCOUNT_FAILED` | Failed to connect | Retry connection |
+
+### Chain & Network
+
+| Code | Description | Handling |
+|------|-------------|----------|
+| `CHAIN_NOT_FOUND` | Chain ID not found | Use supported chain |
+| `CHAIN_DATA_NOT_FOUND` | Chain data unavailable | Check network connection |
+| `VAULT_CONTRACT_NOT_FOUND` | Vault contract missing | Contact support |
+| `ENVIRONMENT_NOT_SUPPORTED` | Environment not supported | Use mainnet/testnet |
+
+### Transactions
+
+| Code | Description | Handling |
+|------|-------------|----------|
+| `TRANSACTION_TIMEOUT` | Transaction timed out | Retry or check explorer |
+| `TRANSACTION_REVERTED` | Transaction reverted | Check contract/params |
+| `TRANSACTION_CHECK_ERROR` | Error checking transaction | Retry |
+| `FETCH_GAS_PRICE_FAILED` | Failed to fetch gas price | Retry |
+
+### Operations
+
+| Code | Description | Handling |
+|------|-------------|----------|
+| `SIMULATION_FAILED` | Simulation failed | Check parameters |
+| `QUOTE_FAILED` | Failed to get quote | Retry |
+| `SWAP_FAILED` | Swap operation failed | Retry or adjust params |
+| `REFUND_FAILED` | Refund request failed | Contact support |
+
+### Intent & Solver
+
+| Code | Description | Handling |
+|------|-------------|----------|
+| `LIQUIDITY_TIMEOUT` | Solver liquidity timeout | Retry later |
+| `RATES_CHANGED_BEYOND_TOLERANCE` | Price moved too much | Refresh and retry |
+| `RFF_FEE_EXPIRED` | Request expired | Retry operation |
+| `SLIPPAGE_EXCEEDED_ALLOWANCE` | Slippage exceeded | Increase allowance |
+
+## Handling Specific Errors
+
+### User Cancellations
+
+```typescript
+try {
+  await sdk.bridge(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.USER_DENIED_INTENT:
+      case ERROR_CODES.USER_DENIED_ALLOWANCE:
+      case ERROR_CODES.USER_DENIED_INTENT_SIGNATURE:
+        // User cancelled - this is not an error to show
+        console.log('User cancelled the operation');
+        return;
+      default:
+        // Show actual errors
+        console.error('Operation failed:', error.message);
+    }
+  }
+}
+```
+
+### Insufficient Balance
+
+```typescript
+try {
+  await sdk.bridge(params);
+} catch (error) {
+  if (error instanceof NexusError && error.code === ERROR_CODES.INSUFFICIENT_BALANCE) {
+    // Get current balance
+    const balances = await sdk.getBalancesForBridge();
+    const asset = balances.find((a) => a.symbol === params.token);
+    
+    console.error(`Insufficient ${params.token}`);
+    console.error(`Available: ${asset?.balance || '0'}`);
+    console.error(`Required: ${params.amount}`);
+    
+    // Show UI to deposit or use different token
+  }
+}
+```
+
+### Transaction Timeout
+
+```typescript
+try {
+  await sdk.execute(params);
+} catch (error) {
+  if (error instanceof NexusError && error.code === ERROR_CODES.TRANSACTION_TIMEOUT) {
+    console.error('Transaction timed out');
+    
+    // Transaction may still be pending
+    // Show explorer link so user can check status
+    if (error.data?.details?.explorerUrl) {
+      console.log('Check status:', error.data.details.explorerUrl);
+    }
+    
+    // Offer retry option
+    showRetryOption();
+  }
+}
+```
+
+### Price Changes (Slippage)
+
+```typescript
+try {
+  await sdk.swapWithExactIn(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    if (error.code === ERROR_CODES.RATES_CHANGED_BEYOND_TOLERANCE) {
+      console.error('Price moved too much during swap');
+      
+      // Refresh quote and retry
+      console.log('Refreshing quote...');
+      await retryWithNewQuote();
+    }
+    
+    if (error.code === ERROR_CODES.SLIPPAGE_EXCEEDED_ALLOWANCE) {
+      console.error('Slippage exceeded tolerance');
+      console.error(error.message);
+      
+      // Ask user to approve higher slippage or retry
+    }
+  }
+}
+```
+
+## Intent Hook
+
+The intent hook is called when the SDK needs user approval for bridge/transfer operations:
+
+```typescript
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Display intent details to user
+  console.log('--- Intent Review ---');
+  console.log(`Token: ${intent.token.symbol}`);
+  console.log(`Total from sources: ${intent.sourcesTotal}`);
+  console.log(`Destination: ${intent.destination.chainName}`);
+  console.log(`Amount: ${intent.destination.amount}`);
+  
+  // Show fees
+  console.log('\nFees:');
+  console.log(`  Protocol: ${intent.fees.protocol}`);
+  console.log(`  Solver: ${intent.fees.solver}`);
+  console.log(`  Gas: ${intent.fees.caGas}`);
+  console.log(`  Total: ${intent.fees.total}`);
+  
+  // Show source chains
+  console.log('\nSource Chains:');
+  intent.sources.forEach((source) => {
+    console.log(`  ${source.chain.name}: ${source.amount} ${source.token.symbol}`);
+  });
+  
+  // Get user approval
+  const userApproves = await showIntentApprovalDialog(intent);
+  
+  if (userApproves) {
+    allow(); // Proceed with operation
+  } else {
+    deny(); // Throws USER_DENIED_INTENT error
+  }
+});
+```
+
+### Intent Refresh
+
+You can refresh the intent with different source chains:
+
+```typescript
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  console.log('Sources:', intent.sources.map((s) => s.chain.name));
+  
+  // Let user select different source chains
+  const selectedChains = await showChainSelector(intent.allSources);
+  
+  if (selectedChains.length > 0) {
+    // Refresh with new selection
+    const refreshedIntent = await refresh(
+      selectedChains.map((s) => s.chain.id)
+    );
+    
+    console.log('Updated fees:', refreshedIntent.fees.total);
+  }
+  
+  allow();
+});
+```
+
+### Intent Data Structure
+
+```typescript
+type ReadableIntent = {
+  // Source chains funds are pulled from
+  sources: Array<{
+    amount: string;
+    amountRaw: bigint;
+    chain: { id: number; name: string; logo: string };
+    token: { decimals: number; symbol: string; logo: string; contractAddress: Hex };
+  }>;
+  
+  // All available sources (before selection)
+  allSources: Array<{ /* same as sources */ }>;
+  
+  // Destination details
+  destination: {
+    amount: string;
+    chainID: number;
+    chainName: string;
+    chainLogo: string | undefined;
+  };
+  
+  // Fee breakdown
+  fees: {
+    caGas: string;      // Chain abstraction gas fee
+    gasSupplied: string; // Gas supplied to destination
+    protocol: string;    // Protocol fee
+    solver: string;      // Solver fee
+    total: string;       // Total fees
+  };
+  
+  // Token being bridged
+  token: {
+    decimals: number;
+    logo: string | undefined;
+    name: string;
+    symbol: string;
+  };
+  
+  // Total amount from all sources
+  sourcesTotal: string;
+};
+```
+
+## Allowance Hook
+
+The allowance hook is called when token approvals are needed:
+
+```typescript
+sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+  // Display approval requests to user
+  console.log('--- Token Approvals Required ---');
+  
+  sources.forEach((source, index) => {
+    console.log(`\n${index + 1}. ${source.chain.name}`);
+    console.log(`   Token: ${source.token.symbol}`);
+    console.log(`   Current allowance: ${source.allowance.current}`);
+    console.log(`   Required minimum: ${source.allowance.minimum}`);
+  });
+  
+  // Get user approval
+  const userApproves = showAllowanceApprovalDialog(sources);
+  
+  if (userApproves) {
+    // Approve exact minimum needed
+    allow(['min']);
+    
+    // Or approve unlimited (common pattern)
+    // allow(['max']);
+    
+    // Or approve specific amounts
+    // allow([1000000n, 2000000n]);
+    
+    // Or mix strategies per source
+    // allow(['min', 'max', 5000000n]);
+  } else {
+    deny(); // Throws USER_DENIED_ALLOWANCE error
+  }
+});
+```
+
+### Allowance Approval Strategies
+
+```typescript
+// Minimum required (most secure)
+allow(['min']);
+
+// Unlimited approval (most convenient)
+allow(['max']);
+
+// Specific amount
+allow([1_000_000_000n]); // 1000 USDC with 6 decimals
+
+// Different per source (by index)
+allow(['min', 'max', 500_000_000n]);
+```
+
+### Allowance Data Structure
+
+```typescript
+type AllowanceHookSources = Array<{
+  allowance: {
+    current: string;     // Current allowance (human-readable)
+    currentRaw: bigint;  // Current allowance (raw)
+    minimum: string;     // Minimum required (human-readable)
+    minimumRaw: bigint;  // Minimum required (raw)
+  };
+  chain: {
+    id: number;
+    logo: string;
+    name: string;
+  };
+  token: {
+    contractAddress: Hex;
+    decimals: number;
+    logo: string;
+    name: string;
+    symbol: string;
+  };
+}>;
+```
+
+## Swap Intent Hook
+
+Called when user approval is needed for swap operations:
+
+```typescript
+sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+  console.log('--- Swap Intent ---');
+  
+  // Show input
+  console.log('Swap from:');
+  intent.sources.forEach((source) => {
+    console.log(`  ${source.amount} ${source.token.symbol} on ${source.chain.name}`);
+  });
+  
+  // Show output
+  console.log('\nSwap to:');
+  console.log(`  ${intent.destination.amount} ${intent.destination.token.symbol}`);
+  console.log(`  on ${intent.destination.chain.name}`);
+  
+  // Show gas
+  if (intent.destination.gas) {
+    console.log(`\nGas: ${intent.destination.gas.amount}`);
+  }
+  
+  // Get user approval
+  const userApproves = await showSwapApprovalDialog(intent);
+  
+  if (userApproves) {
+    allow();
+  } else {
+    deny();
+  }
+  
+  // Optional: Refresh to get updated quote
+  // const refreshedIntent = await refresh();
+  // console.log('Refreshed quote:', refreshedIntent);
+});
+```
+
+## Error Logging and Reporting
+
+### Serialize Errors for Logging
+
+```typescript
+try {
+  await sdk.bridge(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    // Serialize to JSON for logging service
+    const errorData = error.toJSON();
+    
+    logToService({
+      errorCode: error.code,
+      errorMessage: error.message,
+      context: error.data?.context,
+      details: error.data?.details,
+      timestamp: new Date().toISOString(),
+      userId: currentUserId,
+    });
+  }
+}
+```
+
+### Custom Error Logger
+
+```typescript
+function handleNexusError(error: unknown, operation: string) {
+  if (error instanceof NexusError) {
+    console.error(`[${operation}] ${error.code}: ${error.message}`);
+    
+    if (error.data?.context) {
+      console.error(`Context: ${error.data.context}`);
+    }
+    
+    if (error.data?.details) {
+      console.error('Details:', JSON.stringify(error.data.details, null, 2));
+    }
+    
+    // Log to external service
+    logError({
+      operation,
+      error: error.toJSON(),
+    });
+    
+    return error.code;
+  }
+  
+  // Non-NexusError
+  console.error(`[${operation}] Unexpected error:`, error);
+  return 'UNKNOWN_ERROR';
+}
+
+// Usage
+try {
+  await sdk.bridge(params);
+} catch (error) {
+  const errorCode = handleNexusError(error, 'BRIDGE');
+  showErrorToUser(errorCode);
+}
+```
+
+## Best Practices
+
+<Card title="Always Set Hooks" icon="hook">
+  Set up intent and allowance hooks before any operations. Without hooks, the SDK will wait indefinitely for user approval.
+</Card>
+
+<Card title="Distinguish User Cancellations" icon="user-xmark">
+  Don't show error messages for `USER_DENIED_*` errors - these are intentional user actions, not failures.
+</Card>
+
+<Card title="Provide Context" icon="circle-info">
+  Show users why an error occurred and what they can do about it. Use the error's `data.details` for specific information.
+</Card>
+
+<Card title="Handle Async Errors" icon="clock">
+  Bridge and swap operations can take time. Provide progress updates and handle timeout errors gracefully.
+</Card>
+
+<Card title="Log Errors Properly" icon="file-lines">
+  Use `error.toJSON()` to serialize errors for logging. Include operation context and user actions for debugging.
+</Card>
+
+## Real-World Error Handler
+
+Complete example from production:
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+export function handleOperationError(
+  error: unknown,
+  operation: 'bridge' | 'swap' | 'execute'
+): void {
+  if (!(error instanceof NexusError)) {
+    console.error('Unexpected error:', error);
+    showErrorUI('An unexpected error occurred. Please try again.');
+    return;
+  }
+
+  // User cancellations - don't show errors
+  const userCancellations = [
+    ERROR_CODES.USER_DENIED_INTENT,
+    ERROR_CODES.USER_DENIED_ALLOWANCE,
+    ERROR_CODES.USER_DENIED_INTENT_SIGNATURE,
+  ];
+  
+  if (userCancellations.includes(error.code as any)) {
+    console.log('User cancelled operation');
+    return;
+  }
+
+  // Handle specific errors
+  switch (error.code) {
+    case ERROR_CODES.INSUFFICIENT_BALANCE:
+      showErrorUI(
+        'Insufficient balance',
+        'You don\'t have enough tokens to complete this operation.'
+      );
+      break;
+
+    case ERROR_CODES.TRANSACTION_TIMEOUT:
+      showErrorUI(
+        'Transaction timeout',
+        'Transaction is taking longer than expected. Check the explorer for status.',
+        error.data?.details?.explorerUrl
+      );
+      break;
+
+    case ERROR_CODES.SLIPPAGE_EXCEEDED_ALLOWANCE:
+    case ERROR_CODES.RATES_CHANGED_BEYOND_TOLERANCE:
+      showErrorUI(
+        'Price changed',
+        'Token price moved during the swap. Please try again.',
+        undefined,
+        () => retryOperation()
+      );
+      break;
+
+    case ERROR_CODES.LIQUIDITY_TIMEOUT:
+      showErrorUI(
+        'Liquidity unavailable',
+        'Insufficient solver liquidity. Please try again later.'
+      );
+      break;
+
+    default:
+      showErrorUI(
+        'Operation failed',
+        error.message
+      );
+      break;
+  }
+
+  // Log all errors
+  logError({
+    operation,
+    code: error.code,
+    message: error.message,
+    context: error.data?.context,
+    details: error.data?.details,
+  });
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Bridge Operations" icon="bridge" href="/guides/bridge">
+    Apply error handling to bridge operations
+  </Card>
+  <Card title="Swap Operations" icon="arrow-right-arrow-left" href="/guides/swap">
+    Handle swap-specific errors
+  </Card>
+  <Card title="Execute Contracts" icon="code" href="/guides/execute">
+    Error handling for contract execution
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference/introduction">
+    Complete API documentation
+  </Card>
+</CardGroup>

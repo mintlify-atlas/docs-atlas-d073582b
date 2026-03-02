@@ -1,0 +1,384 @@
+---
+title: 'Address Utilities'
+description: 'Validate and format Ethereum addresses'
+icon: 'address-card'
+---
+
+## Overview
+
+The Nexus SDK provides utilities for validating and formatting Ethereum addresses for display.
+
+## isValidAddress
+
+Validate whether a string is a valid Ethereum address.
+
+```typescript
+import { isValidAddress } from '@avail-project/nexus-core';
+
+const valid = isValidAddress('0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45');
+// true
+
+const invalid = isValidAddress('0xinvalid');
+// false
+```
+
+### Parameters
+
+<ParamField path="address" type="string" required>
+  The address string to validate
+</ParamField>
+
+### Returns
+
+<ResponseField name="isValid" type="boolean">
+  `true` if the address is valid, `false` otherwise
+</ResponseField>
+
+### Validation Rules
+
+The function checks:
+- Correct length (42 characters including `0x` prefix)
+- Valid hexadecimal characters
+- Proper checksum (EIP-55)
+
+### Examples
+
+<CodeGroup>
+```typescript Valid Addresses
+import { isValidAddress } from '@avail-project/nexus-core';
+
+// Valid checksummed address
+isValidAddress('0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45');
+// true
+
+// Valid lowercase address
+isValidAddress('0x742d35cc6634c0532925a3b8d4c9db96c4b4db45');
+// true
+
+// Valid uppercase address
+isValidAddress('0x742D35CC6634C0532925A3B8D4C9DB96C4B4DB45');
+// true
+```
+
+```typescript Invalid Addresses
+import { isValidAddress } from '@avail-project/nexus-core';
+
+// Missing 0x prefix
+isValidAddress('742d35Cc6634C0532925a3b8D4C9db96c4b4Db45');
+// false
+
+// Wrong length
+isValidAddress('0x742d35Cc');
+// false
+
+// Invalid characters
+isValidAddress('0xGGGGGGGG6634C0532925a3b8D4C9db96c4b4Db45');
+// false
+
+// Empty string
+isValidAddress('');
+// false
+```
+
+```typescript Input Validation
+import { isValidAddress } from '@avail-project/nexus-core';
+
+function validateRecipient(address: string): void {
+  if (!isValidAddress(address)) {
+    throw new Error('Invalid recipient address');
+  }
+}
+
+// In a form handler
+const handleTransfer = async (recipient: string, amount: bigint) => {
+  validateRecipient(recipient);
+  
+  await sdk.bridgeAndTransfer({
+    token: 'USDC',
+    amount,
+    toChainId: 137,
+    recipient: recipient as `0x${string}`,
+  });
+};
+```
+</CodeGroup>
+
+---
+
+## truncateAddress
+
+Truncate an Ethereum address for display purposes.
+
+```typescript
+import { truncateAddress } from '@avail-project/nexus-core';
+
+const short = truncateAddress('0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45');
+// "0x742d35...4Db45"
+```
+
+### Parameters
+
+<ParamField path="address" type="string" required>
+  The Ethereum address to truncate
+</ParamField>
+
+<ParamField path="startLength" type="number" default={6}>
+  Number of characters to keep from the start (including `0x`)
+</ParamField>
+
+<ParamField path="endLength" type="number" default={4}>
+  Number of characters to keep from the end
+</ParamField>
+
+### Returns
+
+<ResponseField name="truncated" type="string">
+  The truncated address string with ellipsis in the middle
+</ResponseField>
+
+### Behavior
+
+- If the address is invalid, returns the original string unchanged
+- If the address is shorter than `startLength + endLength + 2`, returns it unchanged
+- Validates the address before truncating
+
+### Examples
+
+<CodeGroup>
+```typescript Default Truncation
+import { truncateAddress } from '@avail-project/nexus-core';
+
+const address = '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45';
+
+// Default: 6 chars start, 4 chars end
+truncateAddress(address);
+// "0x742d35...4Db45"
+```
+
+```typescript Custom Length
+import { truncateAddress } from '@avail-project/nexus-core';
+
+const address = '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45';
+
+// Shorter: 4 chars start, 3 chars end
+truncateAddress(address, 4, 3);
+// "0x74...b45"
+
+// Longer: 10 chars start, 8 chars end
+truncateAddress(address, 10, 8);
+// "0x742d35Cc66...c4b4Db45"
+
+// Very short
+truncateAddress(address, 4, 2);
+// "0x74...45"
+```
+
+```typescript UI Components
+import { truncateAddress } from '@avail-project/nexus-core';
+
+// Display in a table cell
+function AddressCell({ address }: { address: string }) {
+  return (
+    <td>
+      <span title={address}>
+        {truncateAddress(address)}
+      </span>
+    </td>
+  );
+}
+
+// Display in a badge
+function AddressBadge({ address }: { address: string }) {
+  return (
+    <div className="badge" title={address}>
+      {truncateAddress(address, 4, 3)}
+    </div>
+  );
+}
+
+// Mobile-friendly display
+function MobileAddress({ address }: { address: string }) {
+  return (
+    <span className="mobile-address">
+      {truncateAddress(address, 4, 2)}
+    </span>
+  );
+}
+```
+
+```typescript With Validation
+import { isValidAddress, truncateAddress } from '@avail-project/nexus-core';
+
+function displayAddress(address: string): string {
+  if (!isValidAddress(address)) {
+    return 'Invalid address';
+  }
+  return truncateAddress(address);
+}
+
+// Usage
+console.log(displayAddress('0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45'));
+// "0x742d35...4Db45"
+
+console.log(displayAddress('invalid'));
+// "Invalid address"
+```
+</CodeGroup>
+
+---
+
+## Common Patterns
+
+<CodeGroup>
+```typescript Form Validation
+import { isValidAddress } from '@avail-project/nexus-core';
+
+interface FormData {
+  recipient: string;
+  amount: string;
+}
+
+function validateForm(data: FormData): string[] {
+  const errors: string[] = [];
+  
+  if (!data.recipient) {
+    errors.push('Recipient address is required');
+  } else if (!isValidAddress(data.recipient)) {
+    errors.push('Invalid recipient address');
+  }
+  
+  if (!data.amount || parseFloat(data.amount) <= 0) {
+    errors.push('Amount must be greater than 0');
+  }
+  
+  return errors;
+}
+```
+
+```typescript Address Display Component
+import { isValidAddress, truncateAddress } from '@avail-project/nexus-core';
+import { useState } from 'react';
+
+function AddressDisplay({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
+  
+  if (!isValidAddress(address)) {
+    return <span className="error">Invalid address</span>;
+  }
+  
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  
+  return (
+    <div className="address-display" onClick={handleCopy}>
+      <span title={address}>
+        {truncateAddress(address)}
+      </span>
+      {copied && <span className="copied">Copied!</span>}
+    </div>
+  );
+}
+```
+
+```typescript Transaction Details
+import { truncateAddress } from '@avail-project/nexus-core';
+
+interface Transaction {
+  hash: string;
+  from: string;
+  to: string;
+  amount: string;
+}
+
+function TransactionRow({ tx }: { tx: Transaction }) {
+  return (
+    <tr>
+      <td title={tx.hash}>{truncateAddress(tx.hash, 6, 4)}</td>
+      <td title={tx.from}>{truncateAddress(tx.from)}</td>
+      <td title={tx.to}>{truncateAddress(tx.to)}</td>
+      <td>{tx.amount}</td>
+    </tr>
+  );
+}
+```
+
+```typescript Recipient Selector
+import { isValidAddress, truncateAddress } from '@avail-project/nexus-core';
+
+interface Contact {
+  name: string;
+  address: string;
+}
+
+function RecipientSelector({ 
+  contacts, 
+  onSelect 
+}: { 
+  contacts: Contact[];
+  onSelect: (address: string) => void;
+}) {
+  return (
+    <div className="recipient-selector">
+      {contacts.map((contact) => (
+        <div 
+          key={contact.address}
+          onClick={() => onSelect(contact.address)}
+          className="contact"
+        >
+          <span className="name">{contact.name}</span>
+          <span className="address" title={contact.address}>
+            {truncateAddress(contact.address)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+</CodeGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always validate before using" icon="shield-check">
+    Use `isValidAddress()` to validate user input before passing addresses to SDK methods.
+  </Card>
+
+  <Card title="Truncate for display only" icon="eye">
+    Only use `truncateAddress()` for UI display. Always store and use full addresses in your application logic.
+  </Card>
+
+  <Card title="Show full address on hover" icon="hand-pointer">
+    Use the `title` attribute or a tooltip to show the full address when users hover over truncated addresses.
+  </Card>
+
+  <Card title="Adjust for screen size" icon="mobile">
+    Use shorter truncation (e.g., 4/2) for mobile displays and longer truncation (6/4) for desktop.
+  </Card>
+</CardGroup>
+
+## TypeScript Types
+
+```typescript
+// Address utilities use the Hex type from viem
+import type { Hex } from 'viem';
+
+// isValidAddress
+function isValidAddress(address: string): boolean;
+
+// truncateAddress
+function truncateAddress(
+  address: string,
+  startLength?: number,
+  endLength?: number
+): string;
+
+// Usage with type safety
+const address: Hex = '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45';
+if (isValidAddress(address)) {
+  console.log(truncateAddress(address));
+}
+```

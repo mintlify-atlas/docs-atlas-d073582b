@@ -1,0 +1,561 @@
+---
+title: Execute Smart Contracts
+description: Execute smart contract calls on any chain with automatic bridging and funding using the Avail Nexus SDK
+---
+
+The Avail Nexus SDK enables you to execute smart contract calls on any supported chain, with automatic cross-chain funding when needed.
+
+## Overview
+
+The SDK provides three execution methods:
+
+- **`execute()`** — Execute a contract call on a specific chain
+- **`bridgeAndExecute()`** — Bridge tokens and execute a contract call
+- **`bridgeAndTransfer()`** — Bridge tokens and send to a recipient
+
+All methods include:
+- Automatic token approvals before execution
+- Gas estimation and price optimization
+- Transaction receipt waiting and confirmation tracking
+- Bridge skip optimization when sufficient funds exist
+
+## Basic Contract Execution
+
+Execute a smart contract call on the target chain:
+
+```typescript
+import { NexusSDK, NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(window.ethereum);
+
+// Execute a contract call
+const result = await sdk.execute(
+  {
+    toChainId: 1, // Ethereum
+    to: '0xContractAddress',
+    data: '0x...', // Encoded function call
+    value: 0n, // ETH to send with call
+  },
+  {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+        console.log('Step:', event.args);
+      }
+    },
+  }
+);
+
+console.log('Transaction:', result.transactionHash);
+console.log('Explorer:', result.explorerUrl);
+```
+
+## Execute Parameters
+
+<ParamField path="toChainId" type="number" required>
+  Target chain ID where the contract exists
+</ParamField>
+
+<ParamField path="to" type="Hex" required>
+  Contract address to call
+</ParamField>
+
+<ParamField path="data" type="Hex" default="'0x'">
+  Encoded function call data. Use ethers/viem to encode function calls
+</ParamField>
+
+<ParamField path="value" type="bigint" default="0n">
+  Native token value (ETH, MATIC, etc.) to send with the call
+</ParamField>
+
+<ParamField path="gas" type="bigint" default="auto-estimated">
+  Gas limit for the transaction
+</ParamField>
+
+<ParamField path="gasPrice" type="'low' | 'medium' | 'high'" default="'medium'">
+  Gas price strategy
+</ParamField>
+
+<ParamField path="tokenApproval" type="object">
+  Token approval before execution:
+  - `token` (string): Token symbol
+  - `amount` (bigint): Amount to approve
+  - `spender` (Hex): Spender address (usually the contract)
+</ParamField>
+
+<ParamField path="waitForReceipt" type="boolean" default="true">
+  Wait for transaction receipt before returning
+</ParamField>
+
+<ParamField path="receiptTimeout" type="number" default="60000">
+  Receipt wait timeout in milliseconds
+</ParamField>
+
+<ParamField path="requiredConfirmations" type="number" default="1">
+  Required block confirmations
+</ParamField>
+
+## Execute Result
+
+```typescript
+type ExecuteResult = {
+  transactionHash: string;
+  explorerUrl: string;
+  chainId: number;
+  receipt?: TransactionReceipt;
+  confirmations?: number;
+  gasUsed?: string;
+  effectiveGasPrice?: string;
+  approvalTransactionHash?: string; // If tokenApproval was used
+};
+```
+
+## Execute with Token Approval
+
+Automatically approve tokens before contract execution:
+
+```typescript
+import { encodeFunctionData } from 'viem';
+
+const depositCalldata = encodeFunctionData({
+  abi: defiProtocolAbi,
+  functionName: 'deposit',
+  args: [100_000_000n], // 100 USDC
+});
+
+const result = await sdk.execute({
+  toChainId: 1,
+  to: '0xDeFiProtocol',
+  data: depositCalldata,
+  tokenApproval: {
+    token: 'USDC',
+    amount: 100_000_000n,
+    spender: '0xDeFiProtocol',
+  },
+});
+
+if (result.approvalTransactionHash) {
+  console.log('Approval tx:', result.approvalTransactionHash);
+}
+console.log('Execution tx:', result.transactionHash);
+```
+
+## Simulating Execution
+
+Estimate gas costs before executing:
+
+```typescript
+const simulation = await sdk.simulateExecute({
+  toChainId: 1,
+  to: '0xContractAddress',
+  data: '0x...',
+  value: 0n,
+});
+
+console.log('Estimated gas:', simulation.gasUsed);
+console.log('Gas price:', simulation.gasPrice);
+console.log('Total gas fee:', simulation.gasFee);
+
+// Convert to human-readable
+const gasCostInETH = Number(simulation.gasFee) / 1e18;
+console.log(`Estimated cost: ${gasCostInETH} ETH`);
+```
+
+<Tip>
+Simulation is free and doesn't require gas. Use it to show users transaction costs before execution.
+</Tip>
+
+## Bridge and Execute
+
+Bridge tokens to a destination chain and execute a contract call:
+
+```typescript
+import { BridgeAndExecuteParams } from '@avail-project/nexus-core';
+
+const result = await sdk.bridgeAndExecute(
+  {
+    token: 'USDC',
+    amount: 100_000_000n, // 100 USDC
+    toChainId: 1, // Ethereum
+    execute: {
+      to: '0xDeFiProtocol',
+      data: depositCalldata,
+      tokenApproval: {
+        token: 'USDC',
+        amount: 100_000_000n,
+        spender: '0xDeFiProtocol',
+      },
+    },
+  },
+  {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+        console.log('Step:', event.args.type);
+      }
+    },
+  }
+);
+
+if (result.bridgeSkipped) {
+  console.log('Used existing balance - no bridge needed!');
+} else {
+  console.log('Bridge explorer:', result.bridgeExplorerUrl);
+}
+
+console.log('Execution explorer:', result.executeExplorerUrl);
+```
+
+### Bridge and Execute Parameters
+
+<ParamField path="token" type="string" required>
+  Token to bridge (e.g., 'USDC', 'USDT', 'ETH')
+</ParamField>
+
+<ParamField path="amount" type="bigint" required>
+  Amount to bridge in smallest unit
+</ParamField>
+
+<ParamField path="toChainId" type="number" required>
+  Destination chain ID
+</ParamField>
+
+<ParamField path="sourceChains" type="number[]" default="auto-selected">
+  Specific source chains to bridge from
+</ParamField>
+
+<ParamField path="execute" type="ExecuteParams" required>
+  Contract execution parameters (same as `execute()` but without `toChainId`)
+</ParamField>
+
+### Bridge and Execute Result
+
+```typescript
+type BridgeAndExecuteResult = {
+  executeTransactionHash: string;
+  executeExplorerUrl: string;
+  approvalTransactionHash?: string;
+  bridgeExplorerUrl?: string; // undefined if bridge was skipped
+  toChainId: number;
+  bridgeSkipped: boolean; // true if sufficient balance existed
+  intent?: ReadableIntent;
+};
+```
+
+## Bridge Skip Optimization
+
+The SDK automatically checks if you have sufficient funds on the destination chain:
+
+```typescript
+const result = await sdk.bridgeAndExecute({
+  token: 'USDC',
+  amount: 50_000_000n,
+  toChainId: 1,
+  execute: {
+    to: '0xContract',
+    data: '0x...',
+  },
+});
+
+if (result.bridgeSkipped) {
+  console.log('✨ Bridge skipped - used existing balance!');
+  console.log('Saved time and gas fees!');
+} else {
+  console.log('Bridged from:', result.intent?.sources.length, 'chains');
+}
+```
+
+<Card title="Smart Optimization" icon="lightbulb">
+  When you have enough tokens on the destination chain, the SDK skips the bridge entirely and executes directly. This saves time and gas costs.
+</Card>
+
+## Simulating Bridge and Execute
+
+Estimate costs for the entire operation:
+
+```typescript
+const simulation = await sdk.simulateBridgeAndExecute({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 1,
+  execute: {
+    to: '0xContract',
+    data: '0x...',
+  },
+});
+
+// Check if bridge is needed
+if (simulation.bridgeSimulation) {
+  console.log('Bridge fees:', simulation.bridgeSimulation.intent.fees);
+  console.log('Bridge sources:', simulation.bridgeSimulation.intent.sources);
+} else {
+  console.log('Bridge not needed - sufficient balance exists');
+}
+
+// Check execution costs
+console.log('Execution gas:', simulation.executeSimulation.gasUsed);
+console.log('Execution fee:', simulation.executeSimulation.gasFee);
+```
+
+## Bridge and Transfer
+
+Bridge tokens and send to a specific recipient:
+
+```typescript
+import { TransferParams } from '@avail-project/nexus-core';
+
+const result = await sdk.bridgeAndTransfer(
+  {
+    token: 'USDC',
+    amount: 50_000_000n, // 50 USDC
+    toChainId: 42161, // Arbitrum
+    recipient: '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45',
+  },
+  {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+        console.log('Step:', event.args.type);
+      }
+    },
+  }
+);
+
+console.log('Transfer complete:', result.explorerUrl);
+```
+
+### Transfer Parameters
+
+<ParamField path="token" type="string" required>
+  Token symbol to bridge
+</ParamField>
+
+<ParamField path="amount" type="bigint" required>
+  Amount in smallest unit
+</ParamField>
+
+<ParamField path="toChainId" type="number" required>
+  Destination chain ID
+</ParamField>
+
+<ParamField path="recipient" type="Hex" required>
+  Recipient address on destination chain
+</ParamField>
+
+<ParamField path="sourceChains" type="number[]" default="auto-selected">
+  Specific source chains to use
+</ParamField>
+
+### Transfer Result
+
+```typescript
+type TransferResult = {
+  transactionHash: string;
+  explorerUrl: string;
+};
+```
+
+## Simulating Transfers
+
+```typescript
+const simulation = await sdk.simulateBridgeAndTransfer({
+  token: 'USDC',
+  amount: 50_000_000n,
+  toChainId: 42161,
+  recipient: '0x...',
+});
+
+console.log('Transfer fees:', simulation.intent.fees);
+console.log('Sources:', simulation.intent.sources);
+```
+
+## Real-World Example: Bridge and Execute
+
+From the SDK's example suite:
+
+```typescript
+import { BridgeAndExecuteParams, NEXUS_EVENTS, NexusSDK } from '@avail-project/nexus-core';
+
+export async function bridgeAndExecute(
+  params: BridgeAndExecuteParams,
+  sdk: NexusSDK
+): Promise<boolean> {
+  console.log('Starting bridge and execute...');
+
+  try {
+    const result = await sdk.bridgeAndExecute(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          console.log('Step completed:', {
+            type: event.args.type,
+            data: event.args.data,
+          });
+        }
+      },
+    });
+
+    console.log('Bridge and execute successful!');
+    console.log('Execute tx:', result.executeTransactionHash);
+    
+    if (result.bridgeSkipped) {
+      console.log('Bridge was skipped - used existing balance');
+    } else {
+      console.log('Bridge explorer:', result.bridgeExplorerUrl);
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Bridge and execute failed:', error);
+    return false;
+  }
+}
+```
+
+## Real-World Example: Bridge and Transfer
+
+From the SDK's example suite:
+
+```typescript
+import { NEXUS_EVENTS, NexusSDK, TransferParams } from '@avail-project/nexus-core';
+
+export async function bridgeAndTransfer(
+  params: TransferParams,
+  sdk: NexusSDK
+): Promise<boolean> {
+  console.log('Starting bridge and transfer...');
+
+  try {
+    const result = await sdk.bridgeAndTransfer(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          console.log('Step completed:', event.args);
+        }
+      },
+    });
+
+    console.log('Bridge and transfer successful!');
+    console.log('Explorer:', result.explorerUrl);
+    return true;
+  } catch (error) {
+    console.error('Bridge and transfer failed:', error);
+    return false;
+  }
+}
+```
+
+## Gas Price Strategies
+
+Control transaction costs with gas price options:
+
+```typescript
+// Fast confirmation (higher cost)
+const result = await sdk.execute({
+  toChainId: 1,
+  to: '0xContract',
+  data: '0x...',
+  gasPrice: 'high',
+});
+
+// Balanced (recommended)
+const result = await sdk.execute({
+  toChainId: 1,
+  to: '0xContract',
+  data: '0x...',
+  gasPrice: 'medium', // default
+});
+
+// Slower but cheaper
+const result = await sdk.execute({
+  toChainId: 1,
+  to: '0xContract',
+  data: '0x...',
+  gasPrice: 'low',
+});
+```
+
+## Transaction Confirmations
+
+Wait for multiple confirmations:
+
+```typescript
+const result = await sdk.execute({
+  toChainId: 1,
+  to: '0xContract',
+  data: '0x...',
+  waitForReceipt: true,
+  receiptTimeout: 120000, // 2 minutes
+  requiredConfirmations: 3, // Wait for 3 blocks
+});
+
+console.log('Confirmations:', result.confirmations);
+console.log('Gas used:', result.gasUsed);
+console.log('Effective gas price:', result.effectiveGasPrice);
+```
+
+## Error Handling
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.execute(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.SIMULATION_FAILED:
+        console.error('Contract call will fail:', error.message);
+        // Show user why (e.g., insufficient allowance, wrong params)
+        break;
+      case ERROR_CODES.TRANSACTION_TIMEOUT:
+        console.error('Transaction confirmation timed out');
+        // Show explorer link so user can check status
+        break;
+      case ERROR_CODES.TRANSACTION_REVERTED:
+        console.error('Transaction reverted:', error.message);
+        // Contract rejected the call
+        break;
+      case ERROR_CODES.INSUFFICIENT_BALANCE:
+        console.error('Not enough tokens');
+        break;
+      case ERROR_CODES.FETCH_GAS_PRICE_FAILED:
+        console.error('Failed to estimate gas - retry');
+        break;
+      default:
+        console.error('Execution error:', error.message);
+    }
+  }
+}
+```
+
+## Best Practices
+
+<Card title="Always Simulate" icon="microscope">
+  Call `simulateExecute()` or `simulateBridgeAndExecute()` before executing to catch errors early and show accurate costs.
+</Card>
+
+<Card title="Handle Token Approvals" icon="shield-check">
+  Use the `tokenApproval` parameter for automatic approval before contract execution. This saves users a manual approval step.
+</Card>
+
+<Card title="Set Appropriate Timeouts" icon="clock">
+  Adjust `receiptTimeout` based on the target chain's block time. Ethereum: 30-60s, Polygon: 5-10s, Arbitrum: 1-5s.
+</Card>
+
+<Card title="Monitor Confirmations" icon="check-double">
+  For high-value transactions, require multiple confirmations (3-6 blocks) to reduce reorg risk.
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Bridge Tokens" icon="bridge" href="/guides/bridge">
+    Learn about basic bridge operations
+  </Card>
+  <Card title="Swap Tokens" icon="arrow-right-arrow-left" href="/guides/swap">
+    Execute cross-chain swaps
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Handle execution errors properly
+  </Card>
+  <Card title="Check Balances" icon="wallet" href="/guides/balances">
+    Query balances before execution
+  </Card>
+</CardGroup>

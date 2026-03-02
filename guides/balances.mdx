@@ -1,0 +1,460 @@
+---
+title: Query Balances
+description: Fetch and manage multi-chain token balances using the Avail Nexus SDK
+---
+
+The Avail Nexus SDK provides powerful methods to query user balances across all supported chains, with automatic aggregation and fiat value calculations.
+
+## Overview
+
+The SDK offers two main balance methods:
+
+- **`getBalancesForBridge()`** — Get balances for bridge-supported tokens
+- **`getBalancesForSwap()`** — Get balances for swap-supported tokens
+
+Both methods return:
+- Aggregated totals across all chains
+- Per-chain breakdowns
+- Fiat (USD) values
+- Token metadata (symbols, decimals, icons)
+
+## Getting Bridge Balances
+
+Fetch balances for all bridge-supported tokens:
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(window.ethereum);
+
+const balances = await sdk.getBalancesForBridge();
+
+balances.forEach((asset) => {
+  console.log(`${asset.symbol}: ${asset.balance}`);
+  console.log(`USD value: $${asset.balanceInFiat}`);
+  
+  // Per-chain breakdown
+  asset.breakdown.forEach((chain) => {
+    console.log(`  ${chain.chain.name}: ${chain.balance}`);
+  });
+});
+```
+
+### Example Output
+
+```typescript
+// USDC: 1250.50
+// USD value: $1250.50
+//   Ethereum: 500.00
+//   Polygon: 750.50
+//
+// ETH: 2.5
+// USD value: $8641.25
+//   Ethereum: 1.0
+//   Arbitrum: 1.5
+```
+
+## Getting Swap Balances
+
+Fetch balances for swap operations:
+
+```typescript
+// Get all swap-supported tokens
+const allTokens = await sdk.getBalancesForSwap();
+
+// Get only native tokens and stablecoins
+const stables = await sdk.getBalancesForSwap(true);
+
+stables.forEach((asset) => {
+  console.log(`${asset.symbol}: ${asset.balance}`);
+});
+```
+
+<ParamField path="onlyNativesAndStables" type="boolean" default="false">
+  Filter to only native tokens (ETH, MATIC, AVAX) and stablecoins (USDC, USDT, USDM)
+</ParamField>
+
+## Balance Data Structure
+
+The `UserAsset` type returned by both methods:
+
+```typescript
+type UserAsset = {
+  symbol: string;           // Token symbol (e.g., 'USDC')
+  balance: string;          // Total balance (human-readable)
+  balanceInFiat: number;    // USD value
+  decimals: number;         // Token decimals
+  icon?: string;            // Token icon URL
+  breakdown: AssetBreakdown[];
+};
+
+type AssetBreakdown = {
+  balance: string;          // Balance on this chain (human-readable)
+  balanceInFiat: number;    // USD value on this chain
+  chain: {
+    id: number;             // Chain ID
+    name: string;           // Chain name (e.g., 'Ethereum')
+    logo: string;           // Chain logo URL
+  };
+  contractAddress: Hex;     // Token contract address on this chain
+  decimals: number;         // Token decimals
+  symbol: string;           // Token symbol
+};
+```
+
+## Real-World Example: Display Balances
+
+From the SDK's example suite:
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+import { ethers } from 'ethers';
+
+async function displayBalances() {
+  // Initialize SDK
+  const sdk = new NexusSDK({ network: 'mainnet' });
+  const provider = window.ethereum;
+  await sdk.initialize(provider);
+
+  // Fetch balances
+  const balances = await sdk.getBalancesForBridge();
+
+  // Display each asset
+  for (const balance of balances) {
+    // Skip zero balances
+    if (balance.balance === '0') {
+      continue;
+    }
+
+    console.log(`\nToken: ${balance.symbol}`);
+    console.log(`Total Balance: ${balance.balance}`);
+    console.log(`USD Value: $${balance.balanceInFiat.toFixed(2)}`);
+
+    // Show per-chain breakdown
+    for (const bd of balance.breakdown) {
+      if (bd.balance === '0') {
+        continue;
+      }
+      console.log(`  ${bd.chain.name}: ${bd.balance}`);
+    }
+  }
+}
+```
+
+## Filtering Balances
+
+### Filter by Minimum Balance
+
+```typescript
+const balances = await sdk.getBalancesForBridge();
+
+// Only show assets worth more than $10
+const significantBalances = balances.filter(
+  (asset) => asset.balanceInFiat > 10
+);
+```
+
+### Filter by Token Symbol
+
+```typescript
+const balances = await sdk.getBalancesForBridge();
+
+// Get USDC balance only
+const usdcBalance = balances.find(
+  (asset) => asset.symbol === 'USDC'
+);
+
+if (usdcBalance) {
+  console.log(`Total USDC: ${usdcBalance.balance}`);
+}
+```
+
+### Filter by Chain
+
+```typescript
+const balances = await sdk.getBalancesForBridge();
+
+// Get all assets on Arbitrum (chain ID 42161)
+const arbitrumAssets = balances
+  .map((asset) => ({
+    symbol: asset.symbol,
+    breakdown: asset.breakdown.filter((b) => b.chain.id === 42161),
+  }))
+  .filter((asset) => asset.breakdown.length > 0);
+
+arbitrumAssets.forEach((asset) => {
+  console.log(`${asset.symbol}: ${asset.breakdown[0].balance}`);
+});
+```
+
+## Checking Specific Token Balance
+
+```typescript
+async function hasEnoughUSDC(
+  sdk: NexusSDK,
+  requiredAmount: bigint
+): Promise<boolean> {
+  const balances = await sdk.getBalancesForBridge();
+  
+  const usdc = balances.find((asset) => asset.symbol === 'USDC');
+  if (!usdc) return false;
+
+  // Convert balance string to bigint for comparison
+  // USDC has 6 decimals
+  const totalBalance = BigInt(parseFloat(usdc.balance) * 1e6);
+  
+  return totalBalance >= requiredAmount;
+}
+
+// Usage
+const hasEnough = await hasEnoughUSDC(sdk, 100_000_000n); // 100 USDC
+if (!hasEnough) {
+  console.log('Insufficient USDC balance');
+}
+```
+
+## Building a Balance Table
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+interface BalanceRow {
+  token: string;
+  chain: string;
+  balance: string;
+  usdValue: number;
+}
+
+async function buildBalanceTable(sdk: NexusSDK): Promise<BalanceRow[]> {
+  const balances = await sdk.getBalancesForBridge();
+  const rows: BalanceRow[] = [];
+
+  for (const asset of balances) {
+    for (const breakdown of asset.breakdown) {
+      // Skip zero balances
+      if (breakdown.balance === '0') continue;
+
+      rows.push({
+        token: asset.symbol,
+        chain: breakdown.chain.name,
+        balance: breakdown.balance,
+        usdValue: breakdown.balanceInFiat,
+      });
+    }
+  }
+
+  // Sort by USD value descending
+  return rows.sort((a, b) => b.usdValue - a.usdValue);
+}
+
+// Display table
+const table = await buildBalanceTable(sdk);
+console.table(table);
+```
+
+## Calculating Portfolio Value
+
+```typescript
+async function calculatePortfolioValue(sdk: NexusSDK): Promise<number> {
+  const balances = await sdk.getBalancesForBridge();
+  
+  const totalValue = balances.reduce(
+    (sum, asset) => sum + asset.balanceInFiat,
+    0
+  );
+
+  return totalValue;
+}
+
+// Usage
+const portfolioValue = await calculatePortfolioValue(sdk);
+console.log(`Total portfolio: $${portfolioValue.toFixed(2)}`);
+```
+
+## Getting Token Prices
+
+The SDK provides utility methods to fetch current token prices:
+
+```typescript
+// Get current prices from Coinbase
+const rates = await sdk.utils.getCoinbaseRates();
+
+console.log(`ETH: $${rates.ETH}`);
+console.log(`USDC: $${rates.USDC}`);
+console.log(`USDT: $${rates.USDT}`);
+
+// Calculate custom amounts
+const ethAmount = 2.5;
+const usdValue = ethAmount * parseFloat(rates.ETH);
+console.log(`${ethAmount} ETH = $${usdValue.toFixed(2)}`);
+```
+
+## Formatting Balances
+
+The SDK includes formatting utilities:
+
+```typescript
+import { formatTokenBalance, formatTokenBalanceParts } from '@avail-project/nexus-core';
+
+// Format with symbol
+const formatted = formatTokenBalance(
+  1234567890n,  // Amount in smallest unit
+  6,             // Decimals (USDC)
+  { symbol: 'USDC' }
+);
+console.log(formatted); // "1,234.57 USDC"
+
+// Get parts separately
+const parts = formatTokenBalanceParts(1234567890n, 6);
+console.log(parts.integer);  // "1,234"
+console.log(parts.decimal);  // "57"
+```
+
+## Checking for Sufficient Balance
+
+Before executing operations, verify sufficient funds:
+
+```typescript
+import { parseUnits } from '@avail-project/nexus-core';
+
+async function checkSufficientBalance(
+  sdk: NexusSDK,
+  token: string,
+  chainId: number,
+  requiredAmount: string // Human-readable amount
+): Promise<boolean> {
+  const balances = await sdk.getBalancesForBridge();
+  
+  const asset = balances.find((a) => a.symbol === token);
+  if (!asset) return false;
+
+  const chainBalance = asset.breakdown.find(
+    (b) => b.chain.id === chainId
+  );
+  if (!chainBalance) return false;
+
+  // Compare balances
+  const required = parseFloat(requiredAmount);
+  const available = parseFloat(chainBalance.balance);
+
+  return available >= required;
+}
+
+// Usage
+const hasBalance = await checkSufficientBalance(
+  sdk,
+  'USDC',
+  137, // Polygon
+  '100' // 100 USDC
+);
+
+if (!hasBalance) {
+  console.log('Insufficient USDC on Polygon');
+}
+```
+
+## Refreshing Balances
+
+Balances are fetched fresh on each call:
+
+```typescript
+// Initial fetch
+const balances1 = await sdk.getBalancesForBridge();
+console.log('Initial USDC:', balances1[0]?.balance);
+
+// Execute a bridge operation
+await sdk.bridge({ token: 'USDC', amount: 100_000_000n, toChainId: 137 });
+
+// Fetch updated balances
+const balances2 = await sdk.getBalancesForBridge();
+console.log('Updated USDC:', balances2[0]?.balance);
+```
+
+<Tip>
+Balance queries are fast, but you may want to cache results in your UI and refresh on user action or after transactions complete.
+</Tip>
+
+## Error Handling
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  const balances = await sdk.getBalancesForBridge();
+  
+  if (balances.length === 0) {
+    console.log('No balances found');
+  }
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.SDK_NOT_INITIALIZED:
+        console.error('SDK not initialized - call initialize() first');
+        break;
+      case ERROR_CODES.WALLET_NOT_CONNECTED:
+        console.error('No wallet connected');
+        break;
+      case ERROR_CODES.NO_BALANCE_FOR_ADDRESS:
+        console.log('No balance found for this address');
+        break;
+      default:
+        console.error('Failed to fetch balances:', error.message);
+    }
+  }
+}
+```
+
+## Multi-Network Support
+
+Fetch balances on different networks:
+
+```typescript
+// Mainnet balances
+const mainnetSdk = new NexusSDK({ network: 'mainnet' });
+await mainnetSdk.initialize(provider);
+const mainnetBalances = await mainnetSdk.getBalancesForBridge();
+
+// Testnet balances
+const testnetSdk = new NexusSDK({ network: 'testnet' });
+await testnetSdk.initialize(provider);
+const testnetBalances = await testnetSdk.getBalancesForBridge();
+
+console.log('Mainnet portfolio:', mainnetBalances);
+console.log('Testnet portfolio:', testnetBalances);
+```
+
+## Best Practices
+
+<Card title="Filter Zero Balances" icon="filter">
+  Always filter out zero balances before displaying to users to keep the UI clean.
+</Card>
+
+<Card title="Cache Wisely" icon="database">
+  Balance queries are fast but not free. Cache results in your UI and refresh on user actions or after transactions.
+</Card>
+
+<Card title="Show USD Values" icon="dollar-sign">
+  Display fiat values alongside token amounts to help users understand their portfolio at a glance.
+</Card>
+
+<Card title="Handle Empty States" icon="inbox">
+  Gracefully handle cases where users have no balances or the wallet isn't connected.
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Bridge Tokens" icon="bridge" href="/guides/bridge">
+    Use balance data to validate bridge operations
+  </Card>
+  <Card title="Swap Tokens" icon="arrow-right-arrow-left" href="/guides/swap">
+    Check balances before executing swaps
+  </Card>
+  <Card title="Execute Contracts" icon="code" href="/guides/execute">
+    Verify sufficient funds before execution
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Handle balance-related errors
+  </Card>
+</CardGroup>

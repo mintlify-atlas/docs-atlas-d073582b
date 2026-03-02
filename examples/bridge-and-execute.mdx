@@ -1,0 +1,472 @@
+---
+title: 'Bridge and Execute'
+description: 'Bridge tokens and execute smart contracts in a single operation with the Nexus SDK'
+icon: 'code'
+---
+
+This guide demonstrates how to bridge tokens to a destination chain and execute a smart contract call in one atomic operation. This is ideal for interacting with DeFi protocols, NFT minting, and other on-chain operations.
+
+## Overview
+
+Bridge and Execute allows you to:
+
+- Fund and interact with contracts on any chain
+- Execute DeFi operations (deposits, swaps, staking)
+- Mint NFTs or interact with protocols
+- Skip bridging if you already have sufficient balance
+- Handle token approvals automatically
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="DeFi Deposits" icon="piggy-bank">
+    Bridge USDC and deposit into lending protocols like Aave or Compound
+  </Card>
+  <Card title="NFT Minting" icon="image">
+    Bridge ETH and mint NFTs on any supported chain
+  </Card>
+  <Card title="Staking" icon="layer-group">
+    Bridge tokens and stake in validator or yield protocols
+  </Card>
+  <Card title="DEX Trading" icon="arrow-right-arrow-left">
+    Bridge and execute swaps on decentralized exchanges
+  </Card>
+</CardGroup>
+
+## How It Works
+
+The SDK intelligently handles the operation:
+
+1. **Balance Check**: Checks if you already have sufficient funds on the destination chain
+2. **Smart Bridging**: Bridges only if needed, or skips entirely if balance is sufficient
+3. **Token Approval**: Handles ERC-20 approvals automatically if required
+4. **Contract Execution**: Executes your smart contract call
+5. **Progress Tracking**: Provides real-time events for each step
+
+<Note>
+  If you already have enough balance on the destination chain, the bridge is skipped and only the execution happens. This saves time and gas!
+</Note>
+
+## Browser Example
+
+<Steps>
+  <Step title="Initialize the SDK">
+    Set up the SDK with your wallet:
+
+    ```typescript
+    import { NexusSDK, type EthereumProvider } from '@avail-project/nexus-core';
+
+    const provider = (window as any).ethereum;
+    const sdk = new NexusSDK({ network: 'testnet' });
+    await sdk.initialize(provider);
+
+    // Set up hooks
+    sdk.setOnIntentHook(({ allow }) => allow());
+    sdk.setOnAllowanceHook(({ allow }) => allow(['min']));
+    ```
+  </Step>
+
+  <Step title="Prepare contract interaction">
+    Encode your contract call using ethers or viem:
+
+    ```typescript
+    import { ethers } from 'ethers';
+
+    // Example: Deposit into a DeFi protocol
+    const protocolAddress = '0xYourProtocolAddress';
+
+    // ABI for the deposit function
+    const abi = ['function deposit(uint256 amount)'];
+    const iface = new ethers.Interface(abi);
+
+    // Encode the function call
+    const depositAmount = 100_000_000n; // 100 USDC
+    const encodedData = iface.encodeFunctionData('deposit', [depositAmount]);
+
+    console.log('Encoded data:', encodedData);
+    ```
+
+    <Info>
+      You can also use viem for encoding:
+      ```typescript
+      import { encodeFunctionData } from 'viem';
+
+      const data = encodeFunctionData({
+        abi: [{ name: 'deposit', type: 'function', inputs: [{ type: 'uint256' }] }],
+        functionName: 'deposit',
+        args: [100_000_000n],
+      });
+      ```
+    </Info>
+  </Step>
+
+  <Step title="Execute bridge and contract call">
+    Execute the combined operation:
+
+    ```typescript
+    import { NEXUS_EVENTS, type BridgeAndExecuteParams } from '@avail-project/nexus-core';
+
+    const params: BridgeAndExecuteParams = {
+      // Bridge parameters
+      token: 'USDC',
+      amount: 100_000_000n, // 100 USDC
+      toChainId: 1, // Ethereum mainnet
+      sourceChains: [8453], // Optional: Bridge from Base
+
+      // Execution parameters
+      execute: {
+        to: protocolAddress,
+        data: encodedData,
+
+        // Token approval for the contract
+        tokenApproval: {
+          token: 'USDC',
+          amount: 100_000_000n,
+          spender: protocolAddress,
+        },
+
+        // Optional execution settings
+        gasPrice: 'medium',
+        waitForReceipt: true,
+        receiptTimeout: 60000,
+        requiredConfirmations: 1,
+      },
+    };
+
+    try {
+      const result = await sdk.bridgeAndExecute(params, {
+        onEvent: (event) => {
+          if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+            console.log('Step completed:', event.args.type);
+          }
+        },
+      });
+
+      console.log('Operation complete!');
+      console.log('Execute TX:', result.executeExplorerUrl);
+
+      if (result.bridgeSkipped) {
+        console.log('Bridge was skipped - used existing balance');
+      } else {
+        console.log('Bridge TX:', result.bridgeExplorerUrl);
+      }
+
+      if (result.approvalTransactionHash) {
+        console.log('Approval TX:', result.approvalTransactionHash);
+      }
+    } catch (error) {
+      console.error('Operation failed:', error);
+    }
+    ```
+  </Step>
+</Steps>
+
+## Node.js Example
+
+For backend applications:
+
+```typescript
+import {
+  BridgeAndExecuteParams,
+  NEXUS_EVENTS,
+  NexusSDK,
+} from '@avail-project/nexus-core';
+import { ethers } from 'ethers';
+
+async function bridgeAndExecute(
+  params: BridgeAndExecuteParams,
+  sdk: NexusSDK
+): Promise<boolean> {
+  try {
+    const result = await sdk.bridgeAndExecute(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          console.log(`[${new Date().toISOString()}] ${event.args.type}`);
+        }
+      },
+    });
+
+    console.log('Bridge and Execute successful!');
+    console.log('Execute transaction:', result.executeExplorerUrl);
+
+    if (!result.bridgeSkipped) {
+      console.log('Bridge transaction:', result.bridgeExplorerUrl);
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Bridge and Execute failed:', error);
+    return false;
+  }
+}
+
+// Initialize SDK
+const wallet = new ethers.Wallet(process.env.PRIVATE_KEY!);
+const sdk = new NexusSDK({ network: 'testnet' });
+await sdk.initialize(wallet);
+
+// Set hooks
+sdk.setOnIntentHook(({ allow }) => allow());
+sdk.setOnAllowanceHook(({ allow }) => allow(['min']));
+
+// Prepare contract call
+const iface = new ethers.Interface(['function deposit(uint256)']);
+const data = iface.encodeFunctionData('deposit', [100_000_000n]);
+
+// Execute
+await bridgeAndExecute(
+  {
+    token: 'USDC',
+    amount: 100_000_000n,
+    toChainId: 1,
+    execute: {
+      to: '0xProtocolAddress',
+      data: data,
+      tokenApproval: {
+        token: 'USDC',
+        amount: 100_000_000n,
+        spender: '0xProtocolAddress',
+      },
+    },
+  },
+  sdk
+);
+```
+
+## Execute Parameters
+
+All available execution options:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `to` | `Hex` | Yes | Contract address to call |
+| `data` | `Hex` | No | Encoded function call data |
+| `value` | `bigint` | No | Native token value to send (in wei) |
+| `gas` | `bigint` | No | Gas limit for the transaction |
+| `gasPrice` | `'low' \| 'medium' \| 'high'` | No | Gas price strategy |
+| `tokenApproval` | `{ token, amount, spender }` | No | Token approval before execution |
+| `waitForReceipt` | `boolean` | No | Wait for transaction receipt |
+| `receiptTimeout` | `number` | No | Receipt wait timeout (ms) |
+| `requiredConfirmations` | `number` | No | Required block confirmations |
+
+## Token Approvals
+
+When interacting with ERC-20 tokens, you need to approve the contract:
+
+```typescript
+const params: BridgeAndExecuteParams = {
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 1,
+  execute: {
+    to: protocolAddress,
+    data: encodedData,
+
+    // Approve the protocol to spend USDC
+    tokenApproval: {
+      token: 'USDC',
+      amount: 100_000_000n, // Amount to approve
+      spender: protocolAddress, // Who can spend it
+    },
+  },
+};
+```
+
+<Warning>
+  The `tokenApproval.spender` is typically the contract you're calling (`to` address), but some protocols use separate router contracts.
+</Warning>
+
+## Sending Native Tokens
+
+To send ETH (or other native tokens) with your contract call:
+
+```typescript
+const params: BridgeAndExecuteParams = {
+  token: 'ETH',
+  amount: 1_000_000_000_000_000_000n, // 1 ETH to bridge
+  toChainId: 1,
+  execute: {
+    to: nftContractAddress,
+    data: encodedMintData,
+    value: 100_000_000_000_000_000n, // 0.1 ETH mint price
+  },
+};
+```
+
+## Simulation
+
+Test your operation before executing:
+
+```typescript
+const simulation = await sdk.simulateBridgeAndExecute(params);
+
+// Check bridge simulation (null if not needed)
+if (simulation.bridgeSimulation) {
+  console.log('Bridge fees:', simulation.bridgeSimulation.intent.fees.total);
+  console.log('Source chains:', simulation.bridgeSimulation.intent.sources);
+}
+
+// Check execution simulation
+console.log('Gas estimate:', simulation.executeSimulation.gasUsed);
+console.log('Gas fee:', simulation.executeSimulation.gasFee);
+
+// Calculate total cost
+const totalGasCost = simulation.executeSimulation.gasFee;
+if (simulation.bridgeSimulation) {
+  console.log('Bridge fees:', simulation.bridgeSimulation.intent.fees.total);
+}
+```
+
+## Result Structure
+
+```typescript
+type BridgeAndExecuteResult = {
+  // Execution result
+  executeTransactionHash: string;
+  executeExplorerUrl: string;
+  toChainId: number;
+
+  // Optional: approval transaction
+  approvalTransactionHash?: string;
+
+  // Optional: bridge transaction (undefined if skipped)
+  bridgeExplorerUrl?: string;
+  intent?: ReadableIntent;
+
+  // Bridge optimization flag
+  bridgeSkipped: boolean; // true if balance was sufficient
+};
+```
+
+## Common Patterns
+
+<Tabs>
+  <Tab title="DeFi Deposit">
+    ```typescript
+    // Deposit USDC into Aave
+    const aavePool = '0x794a61358D6845594F94dc1DB02A252b5b4814aD';
+    const iface = new ethers.Interface([
+      'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)',
+    ]);
+
+    const data = iface.encodeFunctionData('supply', [
+      '0xUSDCAddress',
+      100_000_000n, // 100 USDC
+      userAddress,
+      0, // referral code
+    ]);
+
+    await sdk.bridgeAndExecute({
+      token: 'USDC',
+      amount: 100_000_000n,
+      toChainId: 1,
+      execute: {
+        to: aavePool,
+        data: data,
+        tokenApproval: {
+          token: 'USDC',
+          amount: 100_000_000n,
+          spender: aavePool,
+        },
+      },
+    });
+    ```
+  </Tab>
+
+  <Tab title="NFT Mint">
+    ```typescript
+    // Mint NFT on Base
+    const nftContract = '0xNFTContractAddress';
+    const iface = new ethers.Interface(['function mint(uint256 quantity)']);
+    const data = iface.encodeFunctionData('mint', [1]);
+
+    await sdk.bridgeAndExecute({
+      token: 'ETH',
+      amount: 100_000_000_000_000_000n, // 0.1 ETH
+      toChainId: 8453, // Base
+      execute: {
+        to: nftContract,
+        data: data,
+        value: 50_000_000_000_000_000n, // 0.05 ETH mint price
+      },
+    });
+    ```
+  </Tab>
+
+  <Tab title="Staking">
+    ```typescript
+    // Stake tokens in a protocol
+    const stakingContract = '0xStakingContractAddress';
+    const iface = new ethers.Interface(['function stake(uint256 amount)']);
+    const stakeAmount = 1000_000_000n; // 1000 tokens
+    const data = iface.encodeFunctionData('stake', [stakeAmount]);
+
+    await sdk.bridgeAndExecute({
+      token: 'USDC',
+      amount: stakeAmount,
+      toChainId: 137, // Polygon
+      execute: {
+        to: stakingContract,
+        data: data,
+        tokenApproval: {
+          token: 'USDC',
+          amount: stakeAmount,
+          spender: stakingContract,
+        },
+        waitForReceipt: true,
+        requiredConfirmations: 2,
+      },
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.bridgeAndExecute(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.INSUFFICIENT_BALANCE:
+        console.error('Not enough tokens for operation');
+        break;
+
+      case ERROR_CODES.TRANSACTION_REVERTED:
+        console.error('Contract execution reverted:', error.data?.details);
+        break;
+
+      case ERROR_CODES.SIMULATION_FAILED:
+        console.error('Pre-execution simulation failed');
+        break;
+
+      case ERROR_CODES.TRANSACTION_TIMEOUT:
+        console.error('Transaction timed out');
+        break;
+
+      default:
+        console.error('Operation failed:', error.message);
+    }
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic Bridge" icon="bridge" href="/examples/basic-bridge">
+    Learn basic bridge operations
+  </Card>
+  <Card title="Progress UI" icon="spinner" href="/examples/progress-ui">
+    Build progress tracking interfaces
+  </Card>
+  <Card title="Execute API" icon="book" href="/api/execute-operations">
+    View execute API reference
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Learn error handling best practices
+  </Card>
+</CardGroup>

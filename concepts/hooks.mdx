@@ -1,0 +1,621 @@
+---
+title: "Hooks"
+description: "Implement user approval workflows with SDK hooks"
+---
+
+## Overview
+
+Hooks are callback functions that the SDK triggers at critical points during operations, allowing you to build interactive user experiences. They enable users to review and approve actions before execution.
+
+## Available Hooks
+
+The Avail Nexus SDK provides three types of hooks:
+
+<CardGroup cols={3}>
+  <Card title="Intent Hook" icon="route">
+    Review cross-chain intents before execution
+  </Card>
+  <Card title="Allowance Hook" icon="shield-check">
+    Approve token spending allowances
+  </Card>
+  <Card title="Swap Intent Hook" icon="arrow-right-arrow-left">
+    Review swap operations before execution
+  </Card>
+</CardGroup>
+
+## Intent Hook
+
+Called when the SDK needs user approval for a bridge or transfer intent.
+
+### Setting the Hook
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Your approval logic here
+});
+```
+
+### Hook Data Structure
+
+```typescript
+type OnIntentHookData = {
+  allow: () => void;
+  deny: () => void;
+  intent: ReadableIntent;
+  refresh: (selectedSources?: number[]) => Promise<ReadableIntent>;
+};
+```
+
+**Parameters:**
+
+<ParamField path="allow" type="() => void">
+  Call this function to approve the intent and proceed with execution.
+</ParamField>
+
+<ParamField path="deny" type="() => void">
+  Call this function to reject the intent. Throws a `USER_DENIED_INTENT` error.
+</ParamField>
+
+<ParamField path="intent" type="ReadableIntent">
+  The intent object containing sources, destination, fees, and token information.
+</ParamField>
+
+<ParamField path="refresh" type="(selectedSources?: number[]) => Promise<ReadableIntent>">
+  Refresh the intent with updated quotes or different source chains.
+</ParamField>
+
+### Example: Basic Intent Review
+
+```typescript
+sdk.setOnIntentHook(async ({ intent, allow, deny }) => {
+  console.log('=== Intent Review ===');
+  
+  // Display sources
+  console.log('Sources:');
+  intent.sources.forEach(source => {
+    console.log(`  - ${source.amount} ${source.token.symbol} from ${source.chain.name}`);
+  });
+  
+  // Display destination
+  console.log(`Destination: ${intent.destination.amount} on ${intent.destination.chainName}`);
+  
+  // Display fees
+  console.log('Fees:');
+  console.log(`  Protocol: ${intent.fees.protocol}`);
+  console.log(`  Solver: ${intent.fees.solver}`);
+  console.log(`  Gas: ${intent.fees.caGas}`);
+  console.log(`  Total: ${intent.fees.total}`);
+  
+  // Get user approval
+  const approved = confirm('Approve this intent?');
+  
+  if (approved) {
+    allow();
+  } else {
+    deny();
+  }
+});
+```
+
+### Example: Intent with Refresh
+
+```typescript
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Show initial intent
+  displayIntent(intent);
+  
+  // User wants to use different chains
+  const wantsCustomSources = await askUserForCustomization();
+  
+  if (wantsCustomSources) {
+    // Show available sources
+    const availableChains = intent.allSources.map(s => s.chain.id);
+    const selectedChains = await userSelectChains(availableChains);
+    
+    // Refresh with selected chains
+    const refreshedIntent = await refresh(selectedChains);
+    displayIntent(refreshedIntent);
+  }
+  
+  // Final approval
+  const approved = await confirmIntent();
+  if (approved) {
+    allow();
+  } else {
+    deny();
+  }
+});
+```
+
+<Info>
+  Refreshing an intent may change fees and amounts due to price movements or liquidity changes.
+</Info>
+
+## Allowance Hook
+
+Called when token approval is needed before a transaction can proceed.
+
+### Setting the Hook
+
+```typescript
+sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+  // Your approval logic here
+});
+```
+
+### Hook Data Structure
+
+```typescript
+type OnAllowanceHookData = {
+  allow: (amounts: Array<'max' | 'min' | bigint | string>) => void;
+  deny: () => void;
+  sources: AllowanceHookSources;
+};
+
+type AllowanceHookSources = Array<{
+  allowance: {
+    current: string;      // Current allowance (human-readable)
+    currentRaw: bigint;   // Current allowance (raw)
+    minimum: string;      // Minimum required (human-readable)
+    minimumRaw: bigint;   // Minimum required (raw)
+  };
+  chain: {
+    id: number;
+    logo: string;
+    name: string;
+  };
+  token: {
+    contractAddress: Hex;
+    decimals: number;
+    logo: string;
+    name: string;
+    symbol: string;
+  };
+}>;
+```
+
+**Parameters:**
+
+<ParamField path="allow" type="(amounts: Array<'max' | 'min' | bigint | string>) => void">
+  Approve allowances with one value per source:
+  - `'min'` - Approve exact minimum needed
+  - `'max'` - Approve unlimited (type(uint256).max)
+  - `bigint` - Approve specific amount
+</ParamField>
+
+<ParamField path="deny" type="() => void">
+  Reject the allowance request. Throws a `USER_DENIED_ALLOWANCE` error.
+</ParamField>
+
+<ParamField path="sources" type="AllowanceHookSources">
+  Array of sources requiring allowance approval.
+</ParamField>
+
+### Example: Basic Allowance Approval
+
+```typescript
+sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+  console.log('=== Allowance Required ===');
+  
+  sources.forEach((source, index) => {
+    console.log(`Source ${index + 1}:`);
+    console.log(`  Chain: ${source.chain.name}`);
+    console.log(`  Token: ${source.token.symbol}`);
+    console.log(`  Current allowance: ${source.allowance.current}`);
+    console.log(`  Required minimum: ${source.allowance.minimum}`);
+  });
+  
+  // Approve minimum for all sources
+  allow(sources.map(() => 'min'));
+});
+```
+
+### Allowance Approval Strategies
+
+<Tabs>
+  <Tab title="Minimum (Recommended)">
+    Approve only the exact amount needed:
+
+    ```typescript
+    sdk.setOnAllowanceHook(({ sources, allow }) => {
+      // Safest option - approve exact minimum
+      allow(sources.map(() => 'min'));
+    });
+    ```
+
+    <Note>
+      This is the most secure option but requires approval for each transaction.
+    </Note>
+  </Tab>
+
+  <Tab title="Maximum">
+    Approve unlimited amount:
+
+    ```typescript
+    sdk.setOnAllowanceHook(({ sources, allow }) => {
+      // Most convenient - one-time approval
+      allow(sources.map(() => 'max'));
+    });
+    ```
+
+    <Warning>
+      This grants unlimited access to your tokens. Only use with trusted contracts.
+    </Warning>
+  </Tab>
+
+  <Tab title="Custom Amount">
+    Approve a specific amount:
+
+    ```typescript
+    sdk.setOnAllowanceHook(({ sources, allow }) => {
+      // Custom amounts per source
+      const amounts = sources.map(source => {
+        // Approve 2x the minimum for flexibility
+        return source.allowance.minimumRaw * 2n;
+      });
+      allow(amounts);
+    });
+    ```
+  </Tab>
+
+  <Tab title="Mixed Strategy">
+    Different strategies per source:
+
+    ```typescript
+    sdk.setOnAllowanceHook(({ sources, allow }) => {
+      const amounts = sources.map((source, index) => {
+        // First source: minimum
+        if (index === 0) return 'min';
+        // Second source: maximum
+        if (index === 1) return 'max';
+        // Others: custom amount
+        return 1000000n;
+      });
+      allow(amounts);
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Example: User-Confirmed Allowances
+
+```typescript
+sdk.setOnAllowanceHook(async ({ sources, allow, deny }) => {
+  // Display allowance details to user
+  const modal = createAllowanceModal({
+    sources: sources.map(s => ({
+      chain: s.chain.name,
+      token: s.token.symbol,
+      current: s.allowance.current,
+      required: s.allowance.minimum,
+    })),
+  });
+  
+  const userChoice = await modal.show();
+  
+  if (userChoice === 'approve-min') {
+    allow(sources.map(() => 'min'));
+  } else if (userChoice === 'approve-max') {
+    allow(sources.map(() => 'max'));
+  } else {
+    deny();
+  }
+});
+```
+
+## Swap Intent Hook
+
+Called when user approval is needed for a swap operation.
+
+### Setting the Hook
+
+```typescript
+sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Your approval logic here
+});
+```
+
+### Hook Data Structure
+
+```typescript
+type OnSwapIntentHookData = {
+  allow: () => void;
+  deny: () => void;
+  intent: SwapIntent;
+  refresh: () => Promise<SwapIntent>;
+};
+
+type SwapIntent = {
+  destination: {
+    amount: string;
+    chain: { id: number; logo: string; name: string };
+    token: { contractAddress: Hex; decimals: number; symbol: string };
+    gas: {
+      amount: string;
+      token: { contractAddress: Hex; decimals: number; symbol: string };
+    };
+  };
+  sources: Array<{
+    amount: string;
+    chain: { id: number; logo: string; name: string };
+    token: { contractAddress: Hex; decimals: number; symbol: string };
+  }>;
+};
+```
+
+### Example: Basic Swap Review
+
+```typescript
+sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+  console.log('=== Swap Intent Review ===');
+  
+  // Display sources
+  console.log('Swapping from:');
+  intent.sources.forEach(source => {
+    console.log(
+      `  - ${source.amount} ${source.token.symbol} on ${source.chain.name}`
+    );
+  });
+  
+  // Display destination
+  console.log('Receiving:');
+  console.log(
+    `  ${intent.destination.amount} ${intent.destination.token.symbol} on ${intent.destination.chain.name}`
+  );
+  
+  // Display gas
+  console.log('Gas:');
+  console.log(
+    `  ${intent.destination.gas.amount} ${intent.destination.gas.token.symbol}`
+  );
+  
+  // Get approval
+  const approved = confirm('Approve this swap?');
+  
+  if (approved) {
+    allow();
+  } else {
+    deny();
+  }
+});
+```
+
+### Example: Swap with Refresh
+
+```typescript
+sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Show initial quote
+  displaySwapQuote(intent);
+  
+  // Allow user to refresh for updated quote
+  const wantsRefresh = await askToRefreshQuote();
+  
+  if (wantsRefresh) {
+    const updatedIntent = await refresh();
+    displaySwapQuote(updatedIntent);
+  }
+  
+  // Final approval
+  const approved = await confirmSwap();
+  if (approved) {
+    allow();
+  } else {
+    deny();
+  }
+});
+```
+
+<Warning>
+  Swap rates can change between quote and execution. Consider setting slippage tolerance and refreshing quotes if too much time has passed.
+</Warning>
+
+## Default Hook Behavior
+
+If you don't set hooks, the SDK uses these defaults:
+
+```typescript
+// Default intent hook - auto-approves all intents
+default: (data) => data.allow()
+
+// Default allowance hook - approves minimum for all sources
+default: (data) => data.allow(data.sources.map(() => 'min'))
+
+// Default swap intent hook - auto-approves all swaps
+default: (data) => data.allow()
+```
+
+<Warning>
+  Default hooks auto-approve operations without user interaction. Always set custom hooks in production to ensure users can review operations.
+</Warning>
+
+## Error Handling
+
+Handle hook-related errors appropriately:
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.bridge(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.USER_DENIED_INTENT:
+        console.log('User rejected the intent');
+        break;
+      case ERROR_CODES.USER_DENIED_ALLOWANCE:
+        console.log('User rejected the allowance');
+        break;
+      case ERROR_CODES.INVALID_VALUES_ALLOWANCE_HOOK:
+        console.error('Invalid allowance values provided');
+        break;
+      default:
+        console.error('Operation failed:', error.message);
+    }
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Display Key Information">
+    Show users:
+    - Source chains and amounts
+    - Destination chain and expected amount
+    - All fees broken down
+    - Token symbols and logos for clarity
+  </Accordion>
+
+  <Accordion title="Validate User Input">
+    When using custom allowance amounts:
+
+    ```typescript
+    sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+      const amounts = sources.map(source => {
+        // Ensure amount is at least minimum
+        const userAmount = getUserInputAmount();
+        if (userAmount < source.allowance.minimumRaw) {
+          throw new Error('Amount below minimum required');
+        }
+        return userAmount;
+      });
+      allow(amounts);
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Handle Async Operations">
+    Hooks can be async for showing modals or fetching data:
+
+    ```typescript
+    sdk.setOnIntentHook(async ({ intent, allow, deny }) => {
+      // Async modal display
+      const result = await showModalAsync(intent);
+      
+      if (result.approved) {
+        allow();
+      } else {
+        deny();
+      }
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Provide Clear CTAs">
+    Make it obvious what users are approving:
+
+    ```typescript
+    // Good: Specific action
+    <Button onClick={allow}>
+      Approve Bridge of 100 USDC to Polygon
+    </Button>
+
+    // Bad: Vague action
+    <Button onClick={allow}>
+      Continue
+    </Button>
+    ```
+  </Accordion>
+
+  <Accordion title="Add Timeout Protection">
+    Prevent stuck operations:
+
+    ```typescript
+    sdk.setOnIntentHook(async ({ intent, allow, deny }) => {
+      const timeout = setTimeout(() => {
+        console.log('User took too long, cancelling');
+        deny();
+      }, 5 * 60 * 1000); // 5 minutes
+      
+      const approved = await getUserApproval(intent);
+      clearTimeout(timeout);
+      
+      if (approved) allow();
+      else deny();
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Complete Example: Production-Ready Hooks
+
+```typescript
+import { NexusSDK, ERROR_CODES } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+
+// Intent Hook
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  try {
+    const modal = createIntentModal({
+      title: 'Review Bridge',
+      sources: intent.sources,
+      destination: intent.destination,
+      fees: intent.fees,
+      onApprove: allow,
+      onReject: deny,
+      onRefresh: async (chains) => {
+        const updated = await refresh(chains);
+        modal.updateIntent(updated);
+      },
+    });
+    
+    await modal.show();
+  } catch (error) {
+    console.error('Error in intent hook:', error);
+    deny();
+  }
+});
+
+// Allowance Hook
+sdk.setOnAllowanceHook(async ({ sources, allow, deny }) => {
+  try {
+    const modal = createAllowanceModal({
+      title: 'Token Approval Required',
+      sources: sources,
+      strategies: ['min', 'max'],
+      onApprove: (strategy) => {
+        allow(sources.map(() => strategy));
+      },
+      onReject: deny,
+    });
+    
+    await modal.show();
+  } catch (error) {
+    console.error('Error in allowance hook:', error);
+    deny();
+  }
+});
+
+// Swap Intent Hook
+sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+  try {
+    const modal = createSwapModal({
+      title: 'Review Swap',
+      sources: intent.sources,
+      destination: intent.destination,
+      onApprove: allow,
+      onReject: deny,
+      onRefresh: async () => {
+        const updated = await refresh();
+        modal.updateIntent(updated);
+      },
+    });
+    
+    await modal.show();
+  } catch (error) {
+    console.error('Error in swap intent hook:', error);
+    deny();
+  }
+});
+```
+
+## Next Steps
+
+- [Events](/concepts/events) - Track operation progress with events
+- [Intents](/concepts/intents) - Deep dive into the intent structure

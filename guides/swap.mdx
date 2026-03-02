@@ -1,0 +1,439 @@
+---
+title: Swap Tokens
+description: Execute cross-chain swaps with exact input or exact output amounts using the Avail Nexus SDK
+---
+
+The Avail Nexus SDK enables seamless cross-chain token swaps with automatic routing, price optimization, and built-in slippage protection.
+
+## Overview
+
+Swap operations allow you to exchange tokens across different chains. The SDK supports two swap modes:
+
+- **Exact Input** (`swapWithExactIn`): Specify the exact amount to spend
+- **Exact Output** (`swapWithExactOut`): Specify the exact amount to receive
+
+The SDK automatically handles:
+- Cross-chain routing and bridging
+- Price quotes and slippage tolerance
+- Token approvals across multiple chains
+- Progress tracking with detailed step events
+
+## Exact Input Swaps
+
+Swap a specific amount of input tokens for as much output as possible.
+
+### Basic Example
+
+```typescript
+import { 
+  NexusSDK, 
+  NEXUS_EVENTS,
+  TOKEN_CONTRACT_ADDRESSES,
+  SUPPORTED_CHAINS
+} from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(window.ethereum);
+
+// Swap 1000 USDT on Arbitrum for USDC
+const result = await sdk.swapWithExactIn(
+  {
+    from: [
+      {
+        chainId: SUPPORTED_CHAINS.ARBITRUM,
+        tokenAddress: TOKEN_CONTRACT_ADDRESSES.USDT[SUPPORTED_CHAINS.ARBITRUM],
+        amount: 1_000_000_000n, // 1000 USDT (6 decimals)
+      },
+    ],
+    toChainId: SUPPORTED_CHAINS.ARBITRUM,
+    toTokenAddress: TOKEN_CONTRACT_ADDRESSES.USDC[SUPPORTED_CHAINS.ARBITRUM],
+  },
+  {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+        console.log('Swap step:', event.args);
+      }
+    },
+  }
+);
+
+console.log('Swap complete:', result);
+```
+
+### Multi-Chain Input Example
+
+Swap tokens from multiple source chains:
+
+```typescript
+const result = await sdk.swapWithExactIn({
+  from: [
+    {
+      chainId: 10, // Optimism
+      tokenAddress: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // USDC on Optimism
+      amount: 500_000_000n, // 500 USDC
+    },
+    {
+      chainId: 42161, // Arbitrum
+      tokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // USDC on Arbitrum
+      amount: 500_000_000n, // 500 USDC
+    },
+  ],
+  toChainId: 8453, // Base
+  toTokenAddress: '0x4200000000000000000000000000000000000006', // ETH on Base
+});
+```
+
+### Exact Input Parameters
+
+<ParamField path="from" type="Array" required>
+  Array of source tokens to swap from:
+  - `chainId` (number): Source chain ID
+  - `tokenAddress` (Hex): Token contract address
+  - `amount` (bigint): Amount in smallest unit
+</ParamField>
+
+<ParamField path="toChainId" type="number" required>
+  Destination chain ID
+</ParamField>
+
+<ParamField path="toTokenAddress" type="Hex" required>
+  Output token contract address on destination chain
+</ParamField>
+
+## Exact Output Swaps
+
+Swap tokens to receive an exact amount of output tokens.
+
+### Basic Example
+
+```typescript
+import { ExactOutSwapInput, NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+// Get exactly 1 ETH on Base
+const result = await sdk.swapWithExactOut(
+  {
+    toChainId: SUPPORTED_CHAINS.BASE,
+    toTokenAddress: TOKEN_CONTRACT_ADDRESSES.ETH[SUPPORTED_CHAINS.BASE],
+    toAmount: 1_000_000_000_000_000_000n, // 1 ETH (18 decimals)
+  },
+  {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+        console.log('Swap step completed:', event.args);
+      }
+    },
+  }
+);
+```
+
+### With Source Restrictions
+
+Limit which source chains/tokens the SDK can use:
+
+```typescript
+const result = await sdk.swapWithExactOut({
+  toChainId: 8453, // Base
+  toTokenAddress: '0x4200000000000000000000000000000000000006', // ETH
+  toAmount: 1_000_000_000_000_000_000n, // 1 ETH
+  fromSources: [
+    {
+      chainId: 137, // Only use Polygon
+      tokenAddress: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', // USDC on Polygon
+    },
+    {
+      chainId: 42161, // Or Arbitrum
+      tokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', // USDC on Arbitrum
+    },
+  ],
+});
+```
+
+### With Native Gas Supply
+
+Supply additional native gas to the destination:
+
+```typescript
+const result = await sdk.swapWithExactOut({
+  toChainId: SUPPORTED_CHAINS.BASE,
+  toTokenAddress: TOKEN_CONTRACT_ADDRESSES.USDC[SUPPORTED_CHAINS.BASE],
+  toAmount: 1000_000_000n, // 1000 USDC
+  toNativeAmount: 10_000_000_000_000_000n, // 0.01 ETH for gas
+});
+```
+
+### Exact Output Parameters
+
+<ParamField path="toChainId" type="number" required>
+  Destination chain ID
+</ParamField>
+
+<ParamField path="toTokenAddress" type="Hex" required>
+  Output token contract address
+</ParamField>
+
+<ParamField path="toAmount" type="bigint" required>
+  Exact output amount desired (in smallest unit)
+</ParamField>
+
+<ParamField path="fromSources" type="Array" default="auto-selected">
+  Optional array to restrict source chains/tokens:
+  - `chainId` (number): Source chain ID
+  - `tokenAddress` (Hex): Token contract address
+</ParamField>
+
+<ParamField path="toNativeAmount" type="bigint" default="0n">
+  Optional native gas amount for destination chain
+</ParamField>
+
+## Swap Result
+
+Both swap methods return a `SwapResult`:
+
+```typescript
+type SwapResult = {
+  success: boolean;
+  result: {
+    transactionHash?: string;
+    explorerUrl?: string;
+    destinationChainId: number;
+    // Additional swap details
+  };
+};
+```
+
+## Checking Supported Chains
+
+Get the list of chains and tokens supported for swaps:
+
+```typescript
+const supported = sdk.getSwapSupportedChains();
+
+supported.forEach((chain) => {
+  console.log(`Chain: ${chain.name} (${chain.id})`);
+  console.log('Supported tokens:', chain.tokens);
+});
+```
+
+## Tracking Swap Progress
+
+Swap operations emit detailed step events. Use them to build progress indicators:
+
+<Steps>
+  <Step title="Listen for Swap Steps">
+    ```typescript
+    await sdk.swapWithExactIn(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+          const step = event.args;
+          
+          console.log(`Step: ${step.type}`);
+          console.log(`Chain: ${step.chain?.name}`);
+          console.log(`Token: ${step.symbol}`);
+          
+          if (step.explorerURL) {
+            console.log('Explorer:', step.explorerURL);
+          }
+        }
+      },
+    });
+    ```
+  </Step>
+
+  <Step title="Handle Different Step Types">
+    ```typescript
+    switch (step.type) {
+      case 'SWAP_START':
+        console.log('Swap initiated');
+        break;
+      case 'DETERMINING_SWAP':
+        console.log('Calculating optimal route...');
+        break;
+      case 'SOURCE_SWAP_BATCH_TX':
+        console.log('Executing source chain swaps...');
+        break;
+      case 'BRIDGE_DEPOSIT':
+        console.log('Bridging funds...');
+        break;
+      case 'DESTINATION_SWAP_BATCH_TX':
+        console.log('Executing destination swap...');
+        break;
+      case 'SWAP_COMPLETE':
+        console.log('Swap completed successfully!');
+        break;
+      case 'SWAP_SKIPPED':
+        console.log('Swap skipped - sufficient balance exists');
+        break;
+    }
+    ```
+  </Step>
+</Steps>
+
+### Swap Step Types
+
+| Step Type | Description |
+|-----------|-------------|
+| `SWAP_START` | Swap operation started |
+| `DETERMINING_SWAP` | Calculating optimal swap route |
+| `CREATE_PERMIT_EOA_TO_EPHEMERAL` | Creating permit for ephemeral wallet |
+| `CREATE_PERMIT_FOR_SOURCE_SWAP` | Creating permit for source swap |
+| `SOURCE_SWAP_BATCH_TX` | Executing source chain swaps |
+| `SOURCE_SWAP_HASH` | Source swap transaction hash |
+| `BRIDGE_DEPOSIT` | Bridge deposit for cross-chain swap |
+| `RFF_ID` | Request for funds ID |
+| `DESTINATION_SWAP_BATCH_TX` | Executing destination swaps |
+| `DESTINATION_SWAP_HASH` | Destination swap transaction hash |
+| `SWAP_COMPLETE` | Swap completed successfully |
+| `SWAP_SKIPPED` | Swap skipped (sufficient balance exists) |
+
+## Getting Balances for Swaps
+
+Fetch user balances for swap operations:
+
+```typescript
+// Get all swap-supported tokens
+const allBalances = await sdk.getBalancesForSwap();
+
+// Get only native tokens and stablecoins
+const stableBalances = await sdk.getBalancesForSwap(true);
+
+stableBalances.forEach((asset) => {
+  console.log(`${asset.symbol}: ${asset.balance}`);
+  
+  asset.breakdown.forEach((breakdown) => {
+    console.log(`  ${breakdown.chain.name}: ${breakdown.balance}`);
+  });
+});
+```
+
+## Real-World Examples
+
+### Exact In Swap (from SDK examples)
+
+```typescript
+import { NEXUS_EVENTS, NexusSDK, ExactInSwapInput } from '@avail-project/nexus-core';
+
+export async function exactInSwap(
+  params: ExactInSwapInput,
+  sdk: NexusSDK
+): Promise<boolean> {
+  console.log('Starting exact in swap...');
+
+  try {
+    const result = await sdk.swapWithExactIn(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+          console.log('Step completed:', event.args);
+        }
+      },
+    });
+
+    console.log('Swap successful:', result);
+    return true;
+  } catch (error) {
+    console.error('Swap failed:', error);
+    return false;
+  }
+}
+```
+
+### Exact Out Swap (from SDK examples)
+
+```typescript
+import { NEXUS_EVENTS, NexusSDK, ExactOutSwapInput } from '@avail-project/nexus-core';
+
+export async function exactOutSwap(
+  params: ExactOutSwapInput,
+  sdk: NexusSDK
+): Promise<boolean> {
+  console.log('Starting exact out swap...');
+
+  try {
+    const result = await sdk.swapWithExactOut(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+          console.log('Step completed:', event.args);
+        }
+      },
+    });
+
+    console.log('Swap successful:', result);
+    return true;
+  } catch (error) {
+    console.error('Swap failed:', error);
+    return false;
+  }
+}
+```
+
+## Error Handling
+
+Swap operations can fail for several reasons:
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  await sdk.swapWithExactIn(params);
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.INSUFFICIENT_BALANCE:
+        console.error('Not enough tokens to complete swap');
+        break;
+      case ERROR_CODES.QUOTE_FAILED:
+        console.error('Failed to get swap quote:', error.message);
+        break;
+      case ERROR_CODES.SWAP_FAILED:
+        console.error('Swap execution failed:', error.message);
+        break;
+      case ERROR_CODES.SLIPPAGE_EXCEEDED_ALLOWANCE:
+        console.error('Price moved too much - retry with higher slippage');
+        break;
+      case ERROR_CODES.USER_DENIED_INTENT:
+        console.log('User cancelled the swap');
+        break;
+      default:
+        console.error('Unexpected error:', error.message);
+    }
+  }
+}
+```
+
+<Warning>
+Swap prices can change between quote and execution. Always set up proper error handling for `RATES_CHANGED_BEYOND_TOLERANCE` and `SLIPPAGE_EXCEEDED_ALLOWANCE` errors.
+</Warning>
+
+## Best Practices
+
+<Card title="Use Token Contract Addresses" icon="file-contract">
+  Always use the `TOKEN_CONTRACT_ADDRESSES` constant from the SDK to ensure you're using the correct contract addresses for each chain.
+</Card>
+
+<Card title="Check Supported Chains" icon="link">
+  Call `getSwapSupportedChains()` to verify a chain/token pair supports swaps before attempting the operation.
+</Card>
+
+<Card title="Handle Price Changes" icon="chart-line">
+  Implement retry logic for slippage and rate change errors, potentially with user confirmation.
+</Card>
+
+<Card title="Track Progress" icon="list-check">
+  Use `SWAP_STEP_COMPLETE` events to provide real-time feedback, especially for cross-chain swaps which can take longer.
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Bridge Tokens" icon="bridge" href="/guides/bridge">
+    Learn about basic bridge operations
+  </Card>
+  <Card title="Execute Contracts" icon="code" href="/guides/execute">
+    Combine swaps with smart contract execution
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Comprehensive error handling patterns
+  </Card>
+  <Card title="Check Balances" icon="wallet" href="/guides/balances">
+    Query multi-chain token balances
+  </Card>
+</CardGroup>

@@ -1,0 +1,313 @@
+---
+title: Bridge Tokens
+description: Learn how to bridge tokens across chains using the Avail Nexus SDK
+---
+
+The Avail Nexus SDK makes it easy to bridge tokens across 16+ supported chains with automatic source chain selection, optimal routing, and real-time progress tracking.
+
+## Overview
+
+Bridge operations move tokens from one or more source chains to a destination chain. The SDK automatically:
+
+- Selects optimal source chains based on available balances
+- Calculates fees and provides cost estimates
+- Handles token approvals and multi-chain deposits
+- Tracks operation progress through detailed step events
+
+## Basic Bridge Example
+
+Here's a complete example of bridging USDC to Polygon:
+
+```typescript
+import { NexusSDK, NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+// Initialize the SDK
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(window.ethereum);
+
+// Execute bridge operation
+const result = await sdk.bridge(
+  {
+    token: 'USDC',
+    amount: 100_000_000n, // 100 USDC (6 decimals)
+    toChainId: 137, // Polygon
+  },
+  {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+        console.log('Bridge steps:', event.args);
+      }
+      if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+        console.log('Step completed:', event.args);
+      }
+    },
+  }
+);
+
+console.log('Bridge complete:', result.explorerUrl);
+```
+
+## Bridge Parameters
+
+<ParamField path="token" type="string" required>
+  Token symbol to bridge: `'ETH'`, `'USDC'`, `'USDT'`, or `'USDM'`
+</ParamField>
+
+<ParamField path="amount" type="bigint" required>
+  Amount in smallest unit (e.g., 6 decimals for USDC)
+</ParamField>
+
+<ParamField path="toChainId" type="number" required>
+  Destination chain ID (e.g., `137` for Polygon, `42161` for Arbitrum)
+</ParamField>
+
+<ParamField path="recipient" type="Hex" default="connected wallet">
+  Recipient address on destination chain
+</ParamField>
+
+<ParamField path="sourceChains" type="number[]" default="auto-selected">
+  Specific source chains to use. If omitted, SDK automatically selects optimal sources
+</ParamField>
+
+<ParamField path="gas" type="bigint" default="0n">
+  Gas amount to supply on destination chain
+</ParamField>
+
+## Bridge Result
+
+The `bridge()` method returns a `BridgeResult` object:
+
+```typescript
+type BridgeResult = {
+  explorerUrl: string; // Destination chain explorer URL
+  sourceTxs: Array<{
+    chain: { id: number; name: string; logo: string };
+    hash: Hex;
+    explorerUrl: string;
+  }>;
+  intent: ReadableIntent;
+};
+```
+
+## Simulating Bridge Operations
+
+Before executing a bridge, you can simulate it to preview fees and sources:
+
+```typescript
+const simulation = await sdk.simulateBridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137,
+});
+
+// Check estimated fees
+console.log('Total fees:', simulation.intent.fees.total);
+console.log('Protocol fee:', simulation.intent.fees.protocol);
+console.log('Solver fee:', simulation.intent.fees.solver);
+
+// Review source chains
+simulation.intent.sources.forEach((source) => {
+  console.log(`${source.chain.name}: ${source.amount} ${source.token.symbol}`);
+});
+```
+
+<Tip>
+Simulation is free and doesn't require gas. Use it to show users exact costs before they approve the transaction.
+</Tip>
+
+## Calculating Maximum Bridge Amount
+
+Determine the maximum amount you can bridge for a given token:
+
+```typescript
+const max = await sdk.calculateMaxForBridge({
+  token: 'USDC',
+  toChainId: 137,
+});
+
+console.log(`Max bridgeable: ${max.amount} ${max.symbol}`);
+console.log('From chains:', max.sourceChainIds);
+console.log('Raw amount:', max.amountRaw);
+```
+
+## Tracking Bridge Progress
+
+Bridge operations emit detailed step events. Here's how to build a progress tracker:
+
+<Steps>
+  <Step title="Initialize Progress Tracking">
+    Capture the initial steps list to set up your UI:
+
+    ```typescript
+    let allSteps = [];
+    let completedSteps = new Set();
+
+    await sdk.bridge(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEPS_LIST) {
+          allSteps = event.args;
+          console.log(`Total steps: ${allSteps.length}`);
+        }
+      },
+    });
+    ```
+  </Step>
+
+  <Step title="Handle Step Completion">
+    Update your UI as each step completes:
+
+    ```typescript
+    if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+      const step = event.args;
+      completedSteps.add(step.typeID);
+
+      console.log(`Step completed: ${step.type}`);
+
+      // Display explorer links when available
+      if (step.data?.explorerURL) {
+        console.log('View transaction:', step.data.explorerURL);
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Calculate Progress Percentage">
+    Show users how far along they are:
+
+    ```typescript
+    const progress = (completedSteps.size / allSteps.length) * 100;
+    console.log(`Progress: ${progress.toFixed(0)}%`);
+    ```
+  </Step>
+</Steps>
+
+### Bridge Step Types
+
+| Step Type | Description |
+|-----------|-------------|
+| `INTENT_ACCEPTED` | Intent created and accepted by solver |
+| `INTENT_HASH_SIGNED` | User signed the intent hash |
+| `INTENT_SUBMITTED` | Intent submitted to the network |
+| `ALLOWANCE_USER_APPROVAL` | Waiting for user to approve token allowance |
+| `ALLOWANCE_APPROVAL_MINED` | Allowance approval transaction confirmed |
+| `INTENT_DEPOSIT` | Deposit initiated on source chain |
+| `INTENT_DEPOSITS_CONFIRMED` | All deposits confirmed |
+| `INTENT_COLLECTION` | Collecting funds from source chains |
+| `INTENT_FULFILLED` | Intent fulfilled on destination chain |
+
+## Bridging with Specific Source Chains
+
+By default, the SDK automatically selects optimal source chains. You can override this:
+
+```typescript
+// Bridge from specific chains only
+const result = await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137,
+  sourceChains: [1, 42161], // Only use Ethereum and Arbitrum
+});
+```
+
+## Bridging to a Different Recipient
+
+Send bridged tokens to a different address:
+
+```typescript
+const result = await sdk.bridge({
+  token: 'USDC',
+  amount: 50_000_000n,
+  toChainId: 8453, // Base
+  recipient: '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45',
+});
+```
+
+## Supplying Gas on Destination
+
+Provide gas to the recipient on the destination chain:
+
+```typescript
+const result = await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137,
+  gas: 100000n, // Supply 100,000 wei of MATIC
+});
+```
+
+<Warning>
+The `gas` parameter supplies native token (ETH, MATIC, etc.) on the destination chain, not EVM gas units. Ensure you provide the correct amount in wei.
+</Warning>
+
+## Real-World Example: Bridge with Progress UI
+
+Here's a complete example from the SDK's test suite:
+
+```typescript
+import { BridgeParams, NEXUS_EVENTS, NexusSDK } from '@avail-project/nexus-core';
+
+export async function bridge(
+  params: BridgeParams,
+  sdk: NexusSDK
+): Promise<boolean> {
+  console.log('Starting bridge operation...');
+
+  try {
+    const result = await sdk.bridge(params, {
+      onEvent: (event) => {
+        if (event.name === NEXUS_EVENTS.STEP_COMPLETE) {
+          console.log('Step completed:', {
+            type: event.args.type,
+            typeID: event.args.typeID,
+            data: event.args.data,
+          });
+        }
+      },
+    });
+
+    console.log('Bridge successful!');
+    console.log('Destination explorer:', result.explorerUrl);
+    console.log('Source transactions:', result.sourceTxs);
+
+    return true;
+  } catch (error) {
+    console.error('Bridge failed:', error);
+    return false;
+  }
+}
+```
+
+## Best Practices
+
+<Card title="Always Simulate First" icon="calculator">
+  Call `simulateBridge()` before executing to show users accurate fees and sources.
+</Card>
+
+<Card title="Handle User Approvals" icon="user-check">
+  Bridge operations may require token approvals. Set up the allowance hook to handle these (see [Error Handling](/guides/error-handling)).
+</Card>
+
+<Card title="Track Progress" icon="chart-line">
+  Use the `STEPS_LIST` and `STEP_COMPLETE` events to provide real-time feedback to users.
+</Card>
+
+<Card title="Validate Amounts" icon="circle-exclamation">
+  Use `calculateMaxForBridge()` to ensure the requested amount doesn't exceed available balances.
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Swap Tokens" icon="arrow-right-arrow-left" href="/guides/swap">
+    Learn how to swap tokens across chains
+  </Card>
+  <Card title="Execute Contracts" icon="code" href="/guides/execute">
+    Bridge and execute smart contract calls
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Handle errors and user cancellations
+  </Card>
+  <Card title="Check Balances" icon="wallet" href="/guides/balances">
+    Query multi-chain balances
+  </Card>
+</CardGroup>

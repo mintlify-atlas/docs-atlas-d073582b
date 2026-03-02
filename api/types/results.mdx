@@ -1,0 +1,385 @@
+---
+title: 'Result Types'
+description: 'Return types for Avail Nexus SDK operations'
+keywords: ['results', 'response', 'bridge', 'swap', 'execute']
+---
+
+Result types define the return values from SDK operations, providing transaction details, explorer URLs, and operation metadata.
+
+## Bridge results
+
+### BridgeResult
+
+Returned by `bridge()` operations.
+
+<ResponseField name="explorerUrl" type="string" required>
+  Explorer URL for the destination chain transaction
+</ResponseField>
+
+<ResponseField name="sourceTxs" type="object[]" required>
+  Array of source chain transactions
+  <Expandable title="properties">
+    <ResponseField name="chain" type="object" required>
+      Source chain information
+      <Expandable title="properties">
+        <ResponseField name="id" type="number">
+          Chain ID
+        </ResponseField>
+        <ResponseField name="name" type="string">
+          Chain name
+        </ResponseField>
+        <ResponseField name="logo" type="string">
+          Chain logo URL
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    <ResponseField name="hash" type="Hex" required>
+      Transaction hash
+    </ResponseField>
+    <ResponseField name="explorerUrl" type="string" required>
+      Block explorer URL for this transaction
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="intent" type="ReadableIntent" required>
+  Detailed intent information. See [ReadableIntent](/api/types/intents#readableintent)
+</ResponseField>
+
+```typescript
+const result = await sdk.bridge(params);
+
+console.log('Destination explorer:', result.explorerUrl);
+console.log('Source transactions:', result.sourceTxs.length);
+
+result.sourceTxs.forEach((tx) => {
+  console.log(`${tx.chain.name}: ${tx.explorerUrl}`);
+});
+```
+
+### TransferResult
+
+Returned by `bridgeAndTransfer()` operations.
+
+<ResponseField name="transactionHash" type="string" required>
+  Transaction hash on destination chain
+</ResponseField>
+
+<ResponseField name="explorerUrl" type="string" required>
+  Block explorer URL for the transaction
+</ResponseField>
+
+```typescript
+const result = await sdk.bridgeAndTransfer(params);
+
+console.log('Transfer complete:', result.explorerUrl);
+```
+
+### BridgeMaxResult
+
+Returned by `calculateMaxForBridge()`.
+
+<ResponseField name="amountRaw" type="bigint" required>
+  Maximum bridgeable amount in atomic units
+</ResponseField>
+
+<ResponseField name="amount" type="string" required>
+  Maximum bridgeable amount (human-readable)
+</ResponseField>
+
+<ResponseField name="symbol" type="string" required>
+  Token symbol
+</ResponseField>
+
+<ResponseField name="sourceChainIds" type="number[]" required>
+  Chain IDs with available balance
+</ResponseField>
+
+```typescript
+const max = await sdk.calculateMaxForBridge({
+  token: 'USDC',
+  toChainId: 137,
+});
+
+console.log(`Max: ${max.amount} ${max.symbol}`);
+console.log('From chains:', max.sourceChainIds);
+```
+
+---
+
+## Execute results
+
+### ExecuteResult
+
+Returned by `execute()` and related operations.
+
+<ResponseField name="transactionHash" type="string" required>
+  Transaction hash of the executed contract call
+</ResponseField>
+
+<ResponseField name="explorerUrl" type="string" required>
+  Block explorer URL for the transaction
+</ResponseField>
+
+<ResponseField name="chainId" type="number" required>
+  Chain ID where the transaction was executed
+</ResponseField>
+
+<ResponseField name="receipt" type="TransactionReceipt">
+  Transaction receipt (only if `waitForReceipt` was `true`)
+</ResponseField>
+
+<ResponseField name="confirmations" type="number">
+  Number of block confirmations received
+</ResponseField>
+
+<ResponseField name="gasUsed" type="string">
+  Actual gas used by the transaction
+</ResponseField>
+
+<ResponseField name="effectiveGasPrice" type="string">
+  Effective gas price paid
+</ResponseField>
+
+<ResponseField name="approvalTransactionHash" type="string">
+  Transaction hash of token approval (if approval was needed)
+</ResponseField>
+
+```typescript
+const result = await sdk.execute(params, { waitForReceipt: true });
+
+console.log('Executed on chain:', result.chainId);
+console.log('Gas used:', result.gasUsed);
+if (result.approvalTransactionHash) {
+  console.log('Approval tx:', result.approvalTransactionHash);
+}
+```
+
+### BridgeAndExecuteResult
+
+Returned by `bridgeAndExecute()` operations.
+
+<ResponseField name="executeTransactionHash" type="string" required>
+  Transaction hash of the contract execution
+</ResponseField>
+
+<ResponseField name="executeExplorerUrl" type="string" required>
+  Block explorer URL for the execute transaction
+</ResponseField>
+
+<ResponseField name="toChainId" type="number" required>
+  Destination chain ID
+</ResponseField>
+
+<ResponseField name="bridgeSkipped" type="boolean" required>
+  Indicates if bridge was skipped due to sufficient funds on destination chain
+</ResponseField>
+
+<ResponseField name="approvalTransactionHash" type="string">
+  Token approval transaction hash (if approval was needed)
+</ResponseField>
+
+<ResponseField name="bridgeExplorerUrl" type="string">
+  Bridge transaction explorer URL. `undefined` if `bridgeSkipped` is `true`
+</ResponseField>
+
+<ResponseField name="intent" type="ReadableIntent">
+  Bridge intent details. Only present if bridge was executed
+</ResponseField>
+
+<CodeGroup>
+
+```typescript Bridge executed
+const result = await sdk.bridgeAndExecute(params);
+
+if (result.bridgeSkipped) {
+  console.log('Used existing balance');
+} else {
+  console.log('Bridge explorer:', result.bridgeExplorerUrl);
+  console.log('Intent:', result.intent);
+}
+
+console.log('Execute explorer:', result.executeExplorerUrl);
+```
+
+```typescript With approval
+const result = await sdk.bridgeAndExecute(params);
+
+if (result.approvalTransactionHash) {
+  console.log('Approval needed:', result.approvalTransactionHash);
+}
+```
+
+</CodeGroup>
+
+---
+
+## Swap results
+
+### SwapResult
+
+Returned by `swapWithExactIn()` and `swapWithExactOut()` operations.
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the swap was successful
+</ResponseField>
+
+<ResponseField name="result" type="SuccessfulSwapResult" required>
+  Swap result details when `success` is `true`
+  <Expandable title="properties">
+    <ResponseField name="sourceSwaps" type="ChainSwap[]" required>
+      Array of swaps executed on source chains
+    </ResponseField>
+    <ResponseField name="destinationSwap" type="ChainSwap | null" required>
+      Swap executed on destination chain, or `null` if not needed
+    </ResponseField>
+    <ResponseField name="explorerURL" type="string" required>
+      Block explorer URL for the main transaction
+    </ResponseField>
+    <ResponseField name="swapRoute" type="SwapRoute">
+      Detailed swap routing information
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### ChainSwap
+
+Represents a swap executed on a specific chain.
+
+<ResponseField name="chainId" type="number" required>
+  Chain ID where swap was executed
+</ResponseField>
+
+<ResponseField name="txHash" type="Hex" required>
+  Transaction hash
+</ResponseField>
+
+<ResponseField name="swaps" type="Swap[]" required>
+  Array of individual swap operations in the transaction
+  <Expandable title="properties">
+    <ResponseField name="inputContract" type="Hex" required>
+      Input token contract address
+    </ResponseField>
+    <ResponseField name="inputAmount" type="bigint" required>
+      Input amount in atomic units
+    </ResponseField>
+    <ResponseField name="inputDecimals" type="number" required>
+      Input token decimals
+    </ResponseField>
+    <ResponseField name="outputContract" type="Hex" required>
+      Output token contract address
+    </ResponseField>
+    <ResponseField name="outputAmount" type="bigint" required>
+      Output amount in atomic units
+    </ResponseField>
+    <ResponseField name="outputDecimals" type="number" required>
+      Output token decimals
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```typescript
+const result = await sdk.swapWithExactIn(input);
+
+if (result.success) {
+  console.log('Swap complete:', result.result.explorerURL);
+  
+  result.result.sourceSwaps.forEach((swap) => {
+    console.log(`Chain ${swap.chainId}: ${swap.txHash}`);
+    swap.swaps.forEach((s) => {
+      console.log(`  ${s.inputAmount} → ${s.outputAmount}`);
+    });
+  });
+  
+  if (result.result.destinationSwap) {
+    console.log('Destination swap:', result.result.destinationSwap.txHash);
+  }
+}
+```
+
+---
+
+## Simulation results
+
+### SimulationResult
+
+Returned by `simulateBridge()` and related simulation methods.
+
+<ResponseField name="intent" type="ReadableIntent" required>
+  Simulated intent with fee breakdown and routing. See [ReadableIntent](/api/types/intents#readableintent)
+</ResponseField>
+
+<ResponseField name="token" type="TokenInfo" required>
+  Token information
+  <Expandable title="properties">
+    <ResponseField name="contractAddress" type="Hex" required>
+      Token contract address
+    </ResponseField>
+    <ResponseField name="decimals" type="number" required>
+      Token decimals
+    </ResponseField>
+    <ResponseField name="logo" type="string" required>
+      Token logo URL
+    </ResponseField>
+    <ResponseField name="name" type="string" required>
+      Token name
+    </ResponseField>
+    <ResponseField name="symbol" type="string" required>
+      Token symbol
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```typescript
+const simulation = await sdk.simulateBridge(params);
+
+console.log('Estimated fees:', simulation.intent.fees.total);
+console.log('Source chains:', simulation.intent.sources.length);
+console.log('Token:', simulation.token.symbol);
+```
+
+### ExecuteSimulation
+
+Returned by `simulateExecute()`.
+
+<ResponseField name="gasUsed" type="bigint" required>
+  Estimated gas units to be used
+</ResponseField>
+
+<ResponseField name="gasPrice" type="bigint" required>
+  Gas price in wei
+</ResponseField>
+
+<ResponseField name="gasFee" type="bigint" required>
+  Total estimated gas fee (`gasUsed * gasPrice`)
+</ResponseField>
+
+```typescript
+const simulation = await sdk.simulateExecute(params);
+
+const feeInEth = Number(simulation.gasFee) / 1e18;
+console.log(`Estimated fee: ${feeInEth} ETH`);
+```
+
+### BridgeAndExecuteSimulationResult
+
+Returned by `simulateBridgeAndExecute()`.
+
+<ResponseField name="bridgeSimulation" type="SimulationResult | null" required>
+  Bridge simulation details, or `null` if bridge is not needed
+</ResponseField>
+
+<ResponseField name="executeSimulation" type="ExecuteSimulation" required>
+  Execute simulation details
+</ResponseField>
+
+```typescript
+const simulation = await sdk.simulateBridgeAndExecute(params);
+
+if (simulation.bridgeSimulation) {
+  console.log('Bridge fees:', simulation.bridgeSimulation.intent.fees.total);
+}
+
+const executeFee = Number(simulation.executeSimulation.gasFee) / 1e18;
+console.log(`Execute fee: ${executeFee} ETH`);
+```

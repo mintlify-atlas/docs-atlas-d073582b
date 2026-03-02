@@ -1,0 +1,490 @@
+---
+title: "Intents"
+description: "Understanding the intent-based architecture of Avail Nexus"
+---
+
+## What are Intents?
+
+Intents are the core abstraction in Avail Nexus that power cross-chain operations. Instead of manually managing transactions across multiple chains, you declare your **intent** (what you want to achieve), and the SDK handles the execution details.
+
+## Intent-Based Architecture
+
+The intent-based approach provides several key benefits:
+
+<CardGroup cols={2}>
+  <Card title="Declarative" icon="wand-magic-sparkles">
+    Specify *what* you want, not *how* to do it
+  </Card>
+  <Card title="Optimized" icon="gauge-high">
+    Automatic source chain selection and route optimization
+  </Card>
+  <Card title="Transparent" icon="eye">
+    Review fees, sources, and destinations before execution
+  </Card>
+  <Card title="Atomic" icon="atom">
+    All-or-nothing execution with built-in refund mechanisms
+  </Card>
+</CardGroup>
+
+## How Intents Work
+
+When you initiate a bridge or transfer operation, the SDK:
+
+<Steps>
+  <Step title="Create Intent">
+    Analyzes your balances across all chains and creates an optimal intent based on your request.
+  </Step>
+
+  <Step title="Request Approval">
+    Triggers the `onIntentHook` callback, allowing you to review and approve the intent before execution.
+  </Step>
+
+  <Step title="Execute Intent">
+    Coordinates transactions across source chains, manages approvals, and settles on the destination.
+  </Step>
+
+  <Step title="Fulfill Intent">
+    A solver fulfills the intent on the destination chain, completing the cross-chain operation.
+  </Step>
+</Steps>
+
+## Intent Structure
+
+An intent contains all the information about a cross-chain operation:
+
+```typescript
+type ReadableIntent = {
+  // Source chains where funds are pulled from
+  sources: Array<{
+    amount: string;          // Human-readable amount
+    amountRaw: bigint;       // Raw amount in smallest units
+    chain: {
+      id: number;
+      name: string;
+      logo: string;
+    };
+    token: {
+      decimals: number;
+      symbol: string;
+      logo: string;
+      contractAddress: Hex;
+    };
+  }>;
+
+  // All available sources (before selection)
+  allSources: Array<{/* same structure */}>;
+
+  // Destination details
+  destination: {
+    amount: string;
+    chainID: number;
+    chainName: string;
+    chainLogo: string | undefined;
+  };
+
+  // Fee breakdown
+  fees: {
+    caGas: string;         // Chain abstraction gas fee
+    gasSupplied: string;   // Gas supplied to destination
+    protocol: string;      // Protocol fee
+    solver: string;        // Solver fee
+    total: string;         // Total fees
+  };
+
+  // Token being bridged
+  token: {
+    decimals: number;
+    logo: string | undefined;
+    name: string;
+    symbol: string;
+  };
+
+  // Total amount from all sources
+  sourcesTotal: string;
+};
+```
+
+## Creating Intents
+
+### Bridge Intent
+
+Create an intent to bridge tokens to a destination chain:
+
+```typescript
+const result = await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n, // 100 USDC (6 decimals)
+  toChainId: 137, // Polygon
+});
+```
+
+The SDK automatically:
+- Selects optimal source chains based on your balances
+- Calculates fees and routes
+- Creates an intent for review
+
+### Manual Source Selection
+
+You can also specify which chains to use as sources:
+
+```typescript
+const result = await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137,
+  sourceChains: [1, 42161], // Use Ethereum and Arbitrum only
+});
+```
+
+### Transfer Intent
+
+Create an intent to bridge and send to a recipient:
+
+```typescript
+const result = await sdk.bridgeAndTransfer({
+  token: 'USDC',
+  amount: 50_000_000n,
+  toChainId: 42161,
+  recipient: '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45',
+});
+```
+
+## Reviewing Intents
+
+Before execution, intents are presented to users via the `onIntentHook`. This allows review and approval:
+
+```typescript
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Display intent details
+  console.log('Sources:', intent.sources);
+  console.log('Destination:', intent.destination);
+  console.log('Total fees:', intent.fees.total);
+  
+  // Show to user for approval
+  const approved = await showIntentDialog(intent);
+  
+  if (approved) {
+    allow(); // Proceed with execution
+  } else {
+    deny(); // Cancel operation
+  }
+});
+```
+
+<Note>
+  The hook callback receives functions to `allow()` or `deny()` the intent. Calling `deny()` throws a `USER_DENIED_INTENT` error.
+</Note>
+
+## Intent Properties
+
+### Sources
+
+The `sources` array shows which chains will be used and how much from each:
+
+```typescript
+intent.sources.forEach(source => {
+  console.log(`${source.amount} ${source.token.symbol} from ${source.chain.name}`);
+});
+
+// Example output:
+// 50.00 USDC from Ethereum
+// 50.00 USDC from Arbitrum
+```
+
+### All Sources
+
+The `allSources` array shows **all** chains where you have balance, before the selection:
+
+```typescript
+intent.allSources.forEach(source => {
+  const isSelected = intent.sources.some(s => s.chain.id === source.chain.id);
+  console.log(
+    `${source.amount} ${source.token.symbol} on ${source.chain.name}`,
+    isSelected ? '✓ Selected' : '○ Available'
+  );
+});
+```
+
+### Destination
+
+Destination details including the final amount after fees:
+
+```typescript
+console.log(
+  `Receive ${intent.destination.amount} on ${intent.destination.chainName}`
+);
+```
+
+### Fees
+
+Detailed breakdown of all fees:
+
+```typescript
+console.log('Fee Breakdown:');
+console.log('  Protocol fee:', intent.fees.protocol);
+console.log('  Solver fee:', intent.fees.solver);
+console.log('  Gas fee:', intent.fees.caGas);
+console.log('  Gas supplied:', intent.fees.gasSupplied);
+console.log('  Total:', intent.fees.total);
+```
+
+<Info>
+  All fee amounts are in the same token being bridged, making it easy to calculate the final amount you'll receive.
+</Info>
+
+## Refreshing Intents
+
+Intents can be refreshed to get updated quotes or change source chains:
+
+```typescript
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Show initial intent
+  console.log('Initial sources:', intent.sources.map(s => s.chain.name));
+  
+  // User wants to use different chains
+  const newIntent = await refresh([8453, 10]); // Base and Optimism only
+  
+  console.log('Updated sources:', newIntent.sources.map(s => s.chain.name));
+  
+  // Approve the refreshed intent
+  allow();
+});
+```
+
+**Refresh function signature:**
+```typescript
+refresh: (selectedSources?: number[]) => Promise<ReadableIntent>
+```
+
+<Warning>
+  Refreshing an intent may result in different fees and amounts due to price changes or liquidity availability.
+</Warning>
+
+## Simulating Intents
+
+You can simulate operations without executing them to preview intents:
+
+```typescript
+const simulation = await sdk.simulateBridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137,
+});
+
+console.log('Estimated intent:', simulation.intent);
+console.log('Token info:', simulation.token);
+```
+
+<Accordion title="Simulation Result Structure">
+  ```typescript
+  type SimulationResult = {
+    intent: ReadableIntent;
+    token: TokenInfo;
+  };
+  ```
+</Accordion>
+
+## Intent Lifecycle
+
+<Steps>
+  <Step title="Created">
+    SDK creates an intent based on your parameters and available balances.
+  </Step>
+
+  <Step title="Pending Approval">
+    `onIntentHook` is called, waiting for user approval.
+  </Step>
+
+  <Step title="Approved">
+    User calls `allow()`, intent proceeds to execution.
+  </Step>
+
+  <Step title="Signed">
+    User signs the intent hash with their wallet.
+  </Step>
+
+  <Step title="Submitted">
+    Intent is submitted to the network and assigned an intent ID.
+  </Step>
+
+  <Step title="Deposits Made">
+    Tokens are deposited from source chains.
+  </Step>
+
+  <Step title="Fulfilled">
+    Solver delivers tokens to destination chain.
+  </Step>
+</Steps>
+
+## Intent IDs and Tracking
+
+Each intent receives a unique ID once submitted:
+
+```typescript
+const result = await sdk.bridge(params);
+
+console.log('Intent ID:', result.intent); // ReadableIntent with ID
+console.log('Explorer:', result.explorerUrl);
+```
+
+### Viewing Past Intents
+
+Retrieve your historical intents:
+
+```typescript
+const intents = await sdk.getMyIntents(1); // Page 1
+
+intents.forEach(intent => {
+  console.log('Intent ID:', intent.id);
+  console.log('Status:', intent.status);
+  console.log('Created:', intent.createdAt);
+});
+```
+
+### Intent Refunds
+
+If an intent fails or gets stuck, you can request a refund:
+
+```typescript
+const intents = await sdk.getMyIntents(1);
+const failedIntent = intents.find(i => i.status === 'FAILED');
+
+if (failedIntent) {
+  await sdk.refundIntent(Number(failedIntent.id));
+  console.log('Refund requested');
+}
+```
+
+<Warning>
+  Refunds are only available for failed or expired intents. Active intents cannot be refunded.
+</Warning>
+
+## Intent Expiry
+
+Intents expire after 15 minutes if not fulfilled:
+
+```typescript
+const INTENT_EXPIRY = 15 * 60 * 1000; // 15 minutes in milliseconds
+```
+
+Expired intents can be refunded automatically by the SDK's background process.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Review Intents">
+    Display intent details to users, especially:
+    - Total fees
+    - Source chains being used
+    - Final amount they'll receive
+    - Destination chain
+  </Accordion>
+
+  <Accordion title="Handle Denials Gracefully">
+    When users deny an intent, catch the error and provide appropriate feedback:
+
+    ```typescript
+    try {
+      await sdk.bridge(params);
+    } catch (error) {
+      if (error.code === ERROR_CODES.USER_DENIED_INTENT) {
+        console.log('User cancelled the operation');
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use Simulation for Previews">
+    Before showing a form, simulate to show estimated fees:
+
+    ```typescript
+    const simulation = await sdk.simulateBridge({
+      token: 'USDC',
+      amount: estimatedAmount,
+      toChainId: 137,
+    });
+    
+    displayEstimatedFees(simulation.intent.fees);
+    ```
+  </Accordion>
+
+  <Accordion title="Allow Source Customization">
+    Let advanced users choose which chains to use:
+
+    ```typescript
+    sdk.setOnIntentHook(async ({ intent, refresh, allow }) => {
+      // Show all available sources
+      const selectedChains = await userSelectChains(intent.allSources);
+      
+      if (selectedChains) {
+        const newIntent = await refresh(selectedChains);
+        displayIntent(newIntent);
+      }
+      
+      allow();
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Example: Complete Intent Review UI
+
+```typescript
+import { NexusSDK, ERROR_CODES } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+
+// Set up intent review
+sdk.setOnIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Create modal/dialog with intent details
+  const modal = createIntentReviewModal({
+    sources: intent.sources.map(s => ({
+      chain: s.chain.name,
+      amount: `${s.amount} ${s.token.symbol}`,
+      logo: s.chain.logo,
+    })),
+    destination: {
+      chain: intent.destination.chainName,
+      amount: intent.destination.amount,
+    },
+    fees: {
+      protocol: intent.fees.protocol,
+      solver: intent.fees.solver,
+      gas: intent.fees.caGas,
+      total: intent.fees.total,
+    },
+    onApprove: () => allow(),
+    onReject: () => deny(),
+    onRefresh: async (selectedChains) => {
+      const newIntent = await refresh(selectedChains);
+      modal.update(newIntent);
+    },
+  });
+
+  // Show modal and wait for user action
+  await modal.show();
+});
+
+// Execute bridge
+try {
+  const result = await sdk.bridge({
+    token: 'USDC',
+    amount: 100_000_000n,
+    toChainId: 137,
+  });
+  
+  console.log('Bridge successful!');
+  console.log('Explorer:', result.explorerUrl);
+} catch (error) {
+  if (error.code === ERROR_CODES.USER_DENIED_INTENT) {
+    console.log('User rejected the intent');
+  } else {
+    console.error('Bridge failed:', error);
+  }
+}
+```
+
+## Next Steps
+
+- [Hooks](/concepts/hooks) - Learn about all hook types and user approval workflows
+- [Events](/concepts/events) - Track intent execution progress with events

@@ -1,0 +1,186 @@
+---
+title: 'NexusSDK Class'
+description: 'Core SDK class for cross-chain operations'
+---
+
+## Overview
+
+The `NexusSDK` class is the main entry point for all Avail Nexus SDK operations. It provides methods for:
+
+- Cross-chain token bridging
+- Token swapping (exact-in and exact-out)
+- Smart contract execution with automatic bridging
+- Balance management across chains
+- Intent tracking and management
+
+## Constructor
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK(config?);
+```
+
+<ParamField path="config" type="object" optional>
+  Configuration options for the SDK
+  
+  <Expandable title="properties">
+    <ParamField path="network" type="'mainnet' | 'testnet' | NetworkConfig" default="mainnet">
+      Network environment to use
+    </ParamField>
+    
+    <ParamField path="debug" type="boolean" default="false">
+      Enable debug logging
+    </ParamField>
+    
+    <ParamField path="siweChain" type="number" optional>
+      Chain ID for SIWE (Sign-In with Ethereum) signing
+    </ParamField>
+    
+    <ParamField path="analytics" type="AnalyticsConfig" optional>
+      Analytics configuration options
+      
+      <Expandable title="properties">
+        <ParamField path="enabled" type="boolean" default="true">
+          Enable or disable analytics tracking
+        </ParamField>
+        
+        <ParamField path="posthogApiKey" type="string" optional>
+          Custom PostHog API key (uses Avail's instance by default)
+        </ParamField>
+        
+        <ParamField path="posthogApiHost" type="string" optional>
+          Custom PostHog API host
+        </ParamField>
+        
+        <ParamField path="appMetadata" type="object" optional>
+          Application metadata for analytics
+          
+          <Expandable title="properties">
+            <ParamField path="appName" type="string" optional>
+              Application name
+            </ParamField>
+            <ParamField path="appVersion" type="string" optional>
+              Application version
+            </ParamField>
+            <ParamField path="appUrl" type="string" optional>
+              Application URL
+            </ParamField>
+          </Expandable>
+        </ParamField>
+        
+        <ParamField path="privacy" type="object" optional>
+          Privacy configuration
+          
+          <Expandable title="properties">
+            <ParamField path="anonymizeWallets" type="boolean" default="false">
+              Anonymize wallet addresses by hashing
+            </ParamField>
+            <ParamField path="anonymizeAmounts" type="boolean" default="false">
+              Exclude transaction amounts from analytics
+            </ParamField>
+          </Expandable>
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Properties
+
+### `utils`
+
+```typescript
+sdk.utils: NexusUtils
+```
+
+Utility functions for formatting, validation, and chain information. See [Utilities](/api/utilities) for details.
+
+### `analytics`
+
+```typescript
+sdk.analytics: AnalyticsManager
+```
+
+Analytics manager for tracking events and operations. See the [Analytics guide](/advanced/analytics) for usage.
+
+### `hasEvmProvider`
+
+```typescript
+sdk.hasEvmProvider: boolean
+```
+
+Indicates whether an EVM provider has been successfully set.
+
+## Examples
+
+### Basic Initialization
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(window.ethereum);
+```
+
+### With Debug Logging
+
+```typescript
+const sdk = new NexusSDK({
+  network: 'mainnet',
+  debug: true,
+});
+```
+
+### With Custom Analytics
+
+```typescript
+const sdk = new NexusSDK({
+  network: 'mainnet',
+  analytics: {
+    enabled: true,
+    posthogApiKey: 'your-posthog-key',
+    posthogApiHost: 'https://your-posthog-instance.com',
+    appMetadata: {
+      appName: 'My DApp',
+      appVersion: '1.0.0',
+    },
+    privacy: {
+      anonymizeWallets: true,
+      anonymizeAmounts: true,
+    },
+  },
+});
+```
+
+### Testnet Configuration
+
+```typescript
+const sdk = new NexusSDK({ network: 'testnet' });
+await sdk.initialize(provider);
+
+// Now all operations use testnet chains
+const balances = await sdk.getBalancesForBridge();
+```
+
+## API Reference
+
+For detailed method documentation, see:
+
+- [Initialization & Lifecycle](/api/initialization)
+- [Balance Operations](/api/balance-operations)
+- [Bridge Operations](/api/bridge-operations)
+- [Swap Operations](/api/swap-operations)
+- [Execute Operations](/api/execute-operations)
+- [Intent Management](/api/intent-management)
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Initialization" icon="power-off" href="/api/initialization">
+    Initialize and manage SDK lifecycle
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get started with the SDK
+  </Card>
+</CardGroup>

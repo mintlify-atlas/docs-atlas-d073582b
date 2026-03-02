@@ -1,0 +1,368 @@
+---
+title: 'Parameter Types'
+description: 'Input parameter interfaces for Avail Nexus SDK operations'
+keywords: ['parameters', 'bridge', 'swap', 'execute', 'transfer']
+---
+
+Parameter types define the input interfaces for all SDK operations including bridge, swap, execute, and transfer methods.
+
+## Bridge operations
+
+### BridgeParams
+
+Parameters for bridging tokens between chains.
+
+<ResponseField name="token" type="string" required>
+  Token symbol to bridge. Supported tokens: `ETH`, `USDC`, `USDT`, `USDM`
+</ResponseField>
+
+<ResponseField name="amount" type="bigint" required>
+  Amount in smallest unit (atomic units). For example, 100 USDC with 6 decimals = `100_000_000n`
+</ResponseField>
+
+<ResponseField name="toChainId" type="number" required>
+  Destination chain ID. See [Supported Networks](/resources/supported-networks) for available chains
+</ResponseField>
+
+<ResponseField name="recipient" type="Hex">
+  Recipient address on destination chain. Defaults to connected wallet address if omitted
+</ResponseField>
+
+<ResponseField name="sourceChains" type="number[]">
+  Specific source chain IDs to use for bridging. Auto-selected if omitted
+</ResponseField>
+
+<ResponseField name="gas" type="bigint">
+  Gas amount to supply on destination chain for contract execution
+</ResponseField>
+
+<CodeGroup>
+
+```typescript Basic bridge
+const params: BridgeParams = {
+  token: 'USDC',
+  amount: 100_000_000n, // 100 USDC
+  toChainId: 137, // Polygon
+};
+```
+
+```typescript With recipient
+const params: BridgeParams = {
+  token: 'USDC',
+  amount: 50_000_000n,
+  toChainId: 42161, // Arbitrum
+  recipient: '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45',
+};
+```
+
+```typescript With source chains
+const params: BridgeParams = {
+  token: 'ETH',
+  amount: 1000000000000000000n, // 1 ETH
+  toChainId: 8453, // Base
+  sourceChains: [1, 10], // Only from Ethereum and Optimism
+  gas: 100000n,
+};
+```
+
+</CodeGroup>
+
+### TransferParams
+
+Parameters for bridge-and-transfer operations.
+
+<ResponseField name="token" type="string" required>
+  Token symbol to transfer
+</ResponseField>
+
+<ResponseField name="amount" type="bigint" required>
+  Amount in atomic units
+</ResponseField>
+
+<ResponseField name="toChainId" type="number" required>
+  Destination chain ID
+</ResponseField>
+
+<ResponseField name="recipient" type="Hex" required>
+  Recipient address (required for transfers)
+</ResponseField>
+
+<ResponseField name="sourceChains" type="number[]">
+  Specific source chains to use
+</ResponseField>
+
+```typescript
+const params: TransferParams = {
+  token: 'USDC',
+  amount: 50_000_000n,
+  toChainId: 42161,
+  recipient: '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45',
+};
+```
+
+---
+
+## Execute operations
+
+### ExecuteParams
+
+Parameters for executing smart contract calls on a destination chain.
+
+<ResponseField name="toChainId" type="number" required>
+  Target chain ID for contract execution
+</ResponseField>
+
+<ResponseField name="to" type="Hex" required>
+  Contract address to call
+</ResponseField>
+
+<ResponseField name="data" type="Hex">
+  Encoded function call data
+</ResponseField>
+
+<ResponseField name="value" type="bigint">
+  Native token value to send with transaction (in wei)
+</ResponseField>
+
+<ResponseField name="gas" type="bigint">
+  Gas limit for the transaction
+</ResponseField>
+
+<ResponseField name="gasPrice" type="'low' | 'medium' | 'high'">
+  Gas price strategy selector
+</ResponseField>
+
+<ResponseField name="waitForReceipt" type="boolean">
+  Wait for transaction receipt before returning. Default: `false`
+</ResponseField>
+
+<ResponseField name="receiptTimeout" type="number">
+  Receipt wait timeout in milliseconds. Default: `60000`
+</ResponseField>
+
+<ResponseField name="requiredConfirmations" type="number">
+  Required block confirmations. Default: `1`
+</ResponseField>
+
+<ResponseField name="tokenApproval" type="object">
+  Token approval configuration for ERC-20 tokens
+  <Expandable title="properties">
+    <ResponseField name="token" type="string" required>
+      Token symbol to approve
+    </ResponseField>
+    <ResponseField name="amount" type="bigint" required>
+      Amount to approve
+    </ResponseField>
+    <ResponseField name="spender" type="Hex" required>
+      Contract address that will spend the tokens
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+
+```typescript Basic execute
+const params: ExecuteParams = {
+  toChainId: 1,
+  to: '0xContractAddress',
+  data: '0x...', // Encoded function call
+};
+```
+
+```typescript With token approval
+const params: ExecuteParams = {
+  toChainId: 1,
+  to: '0xDeFiProtocol',
+  data: '0x...', // deposit() call
+  tokenApproval: {
+    token: 'USDC',
+    amount: 100_000_000n,
+    spender: '0xDeFiProtocol',
+  },
+  waitForReceipt: true,
+  gasPrice: 'medium',
+};
+```
+
+</CodeGroup>
+
+### BridgeAndExecuteParams
+
+Parameters for bridging tokens and executing a contract call.
+
+<ResponseField name="token" type="string" required>
+  Token to bridge
+</ResponseField>
+
+<ResponseField name="amount" type="bigint" required>
+  Amount to bridge in atomic units
+</ResponseField>
+
+<ResponseField name="toChainId" type="number" required>
+  Destination chain ID
+</ResponseField>
+
+<ResponseField name="sourceChains" type="number[]">
+  Source chains to use for bridging
+</ResponseField>
+
+<ResponseField name="execute" type="Omit<ExecuteParams, 'toChainId'>" required>
+  Contract execution parameters (excluding `toChainId` which is inherited from parent)
+</ResponseField>
+
+```typescript
+const params: BridgeAndExecuteParams = {
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 1,
+  sourceChains: [8453],
+  execute: {
+    to: '0xDeFiProtocol',
+    data: '0x...', // deposit() call
+    tokenApproval: {
+      token: 'USDC',
+      amount: 100_000_000n,
+      spender: '0xDeFiProtocol',
+    },
+  },
+};
+```
+
+---
+
+## Swap operations
+
+### ExactInSwapInput
+
+Parameters for swapping with exact input amounts.
+
+<ResponseField name="from" type="object[]" required>
+  Array of source tokens and amounts to swap
+  <Expandable title="properties">
+    <ResponseField name="chainId" type="number" required>
+      Source chain ID
+    </ResponseField>
+    <ResponseField name="amount" type="bigint" required>
+      Input amount in atomic units
+    </ResponseField>
+    <ResponseField name="tokenAddress" type="Hex" required>
+      Source token contract address
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="toChainId" type="number" required>
+  Destination chain ID
+</ResponseField>
+
+<ResponseField name="toTokenAddress" type="Hex" required>
+  Output token contract address
+</ResponseField>
+
+```typescript
+const input: ExactInSwapInput = {
+  from: [
+    {
+      chainId: 10, // Optimism
+      amount: 1_000_000n,
+      tokenAddress: '0xUSDC...',
+    },
+    {
+      chainId: 42161, // Arbitrum
+      amount: 500_000n,
+      tokenAddress: '0xUSDC...',
+    },
+  ],
+  toChainId: 8453, // Base
+  toTokenAddress: '0xETH...',
+};
+```
+
+### ExactOutSwapInput
+
+Parameters for swapping with exact output amount.
+
+<ResponseField name="toChainId" type="number" required>
+  Destination chain ID
+</ResponseField>
+
+<ResponseField name="toTokenAddress" type="Hex" required>
+  Output token contract address
+</ResponseField>
+
+<ResponseField name="toAmount" type="bigint" required>
+  Exact output amount desired in atomic units
+</ResponseField>
+
+<ResponseField name="fromSources" type="object[]">
+  Optional array to restrict source chains and tokens for routing
+  <Expandable title="properties">
+    <ResponseField name="chainId" type="number" required>
+      Source chain ID
+    </ResponseField>
+    <ResponseField name="tokenAddress" type="Hex" required>
+      Source token contract address
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="toNativeAmount" type="bigint">
+  Optional native gas amount for destination chain
+</ResponseField>
+
+<CodeGroup>
+
+```typescript Basic exact out
+const input: ExactOutSwapInput = {
+  toChainId: 8453,
+  toTokenAddress: '0xETH...',
+  toAmount: 1_000_000_000_000_000_000n, // 1 ETH
+};
+```
+
+```typescript With source restrictions
+const input: ExactOutSwapInput = {
+  fromSources: [
+    { chainId: 10, tokenAddress: '0xUSDC...' },
+    { chainId: 42161, tokenAddress: '0xUSDC...' },
+  ],
+  toChainId: 8453,
+  toTokenAddress: '0xETH...',
+  toAmount: 1_000_000_000_000_000_000n,
+  toNativeAmount: 100000000000000n, // 0.0001 ETH for gas
+};
+```
+
+</CodeGroup>
+
+---
+
+## Callback parameters
+
+### OnEventParam
+
+Event callback configuration for operation progress tracking.
+
+<ResponseField name="onEvent" type="function">
+  Callback function invoked for operation progress events
+  
+  **Signature:** `(event: EventUnion) => void`
+  
+  Where `EventUnion` is:
+  - `{ name: 'STEPS_LIST', args: BridgeStepType[] }`
+  - `{ name: 'STEP_COMPLETE', args: BridgeStepType }`
+  - `{ name: 'SWAP_STEP_COMPLETE', args: SwapStepType }`
+</ResponseField>
+
+```typescript
+{
+  onEvent: (event) => {
+    if (event.name === 'STEPS_LIST') {
+      console.log('All steps:', event.args);
+    }
+    if (event.name === 'STEP_COMPLETE') {
+      console.log('Step complete:', event.args);
+    }
+  }
+}
+```

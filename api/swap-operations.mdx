@@ -1,0 +1,508 @@
+---
+title: 'Swap Operations'
+description: 'Perform cross-chain token swaps with exact-in and exact-out modes'
+---
+
+## swapWithExactIn
+
+Swap tokens specifying the exact input amount. Useful when you want to swap fixed amounts from specific chains.
+
+```typescript
+await sdk.swapWithExactIn(
+  input: ExactInSwapInput,
+  options?: OnEventParam
+): Promise<SwapResult>
+```
+
+### Parameters
+
+<ParamField path="input" type="ExactInSwapInput" required>
+  Swap input parameters
+  
+  <Expandable title="properties">
+    <ParamField path="from" type="array" required>
+      Array of source tokens and amounts
+      
+      <Expandable title="from[] properties">
+        <ParamField path="chainId" type="number" required>
+          Source chain ID
+        </ParamField>
+        
+        <ParamField path="tokenAddress" type="Hex" required>
+          Source token contract address (use `0x0000000000000000000000000000000000000000` for native tokens)
+        </ParamField>
+        
+        <ParamField path="amount" type="bigint" required>
+          Amount to swap in smallest unit
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField path="toChainId" type="number" required>
+      Destination chain ID
+    </ParamField>
+    
+    <ParamField path="toTokenAddress" type="Hex" required>
+      Output token contract address
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="OnEventParam" optional>
+  Event callbacks for progress tracking
+</ParamField>
+
+### Returns
+
+<ResponseField name="SwapResult" type="object">
+  <Expandable title="properties">
+    <ResponseField name="success" type="boolean">
+      Always `true` (throws on failure)
+    </ResponseField>
+    
+    <ResponseField name="result" type="SuccessfulSwapResult">
+      Swap result details
+      
+      <Expandable title="properties">
+        <ResponseField name="sourceSwaps" type="ChainSwap[]">
+          Array of source chain swap details
+          
+          <Expandable title="ChainSwap properties">
+            <ResponseField name="chainId" type="number">
+              Chain ID where swap occurred
+            </ResponseField>
+            
+            <ResponseField name="txHash" type="Hex">
+              Transaction hash
+            </ResponseField>
+            
+            <ResponseField name="swaps" type="Swap[]">
+              Individual swap details
+              
+              <Expandable title="Swap properties">
+                <ResponseField name="inputAmount" type="bigint">
+                  Input amount (raw)
+                </ResponseField>
+                <ResponseField name="inputContract" type="Hex">
+                  Input token address
+                </ResponseField>
+                <ResponseField name="inputDecimals" type="number">
+                  Input token decimals
+                </ResponseField>
+                <ResponseField name="outputAmount" type="bigint">
+                  Output amount (raw)
+                </ResponseField>
+                <ResponseField name="outputContract" type="Hex">
+                  Output token address
+                </ResponseField>
+                <ResponseField name="outputDecimals" type="number">
+                  Output token decimals
+                </ResponseField>
+              </Expandable>
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+        
+        <ResponseField name="destinationSwap" type="ChainSwap | null">
+          Destination chain swap (null if no destination swap needed)
+        </ResponseField>
+        
+        <ResponseField name="explorerURL" type="string">
+          Block explorer URL for the swap intent
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Single Source
+import { NexusSDK } from '@avail-project/nexus-core';
+
+// Swap USDC from Optimism to ETH on Base
+const result = await sdk.swapWithExactIn({
+  from: [
+    {
+      chainId: 10, // Optimism
+      tokenAddress: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // USDC
+      amount: 1_000_000n, // 1 USDC
+    },
+  ],
+  toChainId: 8453, // Base
+  toTokenAddress: '0x0000000000000000000000000000000000000000', // ETH
+});
+
+console.log('Swap complete!');
+console.log('Explorer:', result.result.explorerURL);
+```
+
+```typescript Multiple Sources
+// Swap USDC from multiple chains to ETH on Base
+const result = await sdk.swapWithExactIn({
+  from: [
+    {
+      chainId: 10, // Optimism
+      tokenAddress: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+      amount: 1_000_000n, // 1 USDC
+    },
+    {
+      chainId: 42161, // Arbitrum
+      tokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+      amount: 500_000n, // 0.5 USDC
+    },
+  ],
+  toChainId: 8453, // Base
+  toTokenAddress: '0x0000000000000000000000000000000000000000',
+});
+```
+
+```typescript With Progress Tracking
+import { NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+const result = await sdk.swapWithExactIn(
+  {
+    from: [
+      {
+        chainId: 10,
+        tokenAddress: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+        amount: 1_000_000n,
+      },
+    ],
+    toChainId: 8453,
+    toTokenAddress: '0x0000000000000000000000000000000000000000',
+  },
+  {
+    onEvent: (event) => {
+      if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+        const step = event.args;
+        console.log(`Step: ${step.type}`);
+        
+        if (step.type === 'SOURCE_SWAP_HASH') {
+          console.log('Source swap TX:', step.explorerURL);
+        }
+        
+        if (step.type === 'DESTINATION_SWAP_HASH') {
+          console.log('Destination swap TX:', step.explorerURL);
+        }
+      }
+    },
+  }
+);
+```
+</CodeGroup>
+
+---
+
+## swapWithExactOut
+
+Swap tokens specifying the exact output amount. The SDK automatically determines the required input from available balances.
+
+```typescript
+await sdk.swapWithExactOut(
+  input: ExactOutSwapInput,
+  options?: OnEventParam
+): Promise<SwapResult>
+```
+
+### Parameters
+
+<ParamField path="input" type="ExactOutSwapInput" required>
+  Swap input parameters
+  
+  <Expandable title="properties">
+    <ParamField path="toChainId" type="number" required>
+      Destination chain ID
+    </ParamField>
+    
+    <ParamField path="toTokenAddress" type="Hex" required>
+      Output token contract address
+    </ParamField>
+    
+    <ParamField path="toAmount" type="bigint" required>
+      Exact output amount desired (in smallest unit)
+    </ParamField>
+    
+    <ParamField path="fromSources" type="Source[]" optional>
+      Restrict source chains/tokens for quote routing
+      
+      <Expandable title="Source[] properties">
+        <ParamField path="chainId" type="number" required>
+          Source chain ID
+        </ParamField>
+        
+        <ParamField path="tokenAddress" type="Hex" required>
+          Source token address
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField path="toNativeAmount" type="bigint" optional>
+      Optional native gas amount for destination chain
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="OnEventParam" optional>
+  Event callbacks
+</ParamField>
+
+### Returns
+
+<ResponseField name="SwapResult" type="object">
+  Same structure as `swapWithExactIn()` return value
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Auto Source Selection
+// Get exactly 1 ETH on Base
+const result = await sdk.swapWithExactOut({
+  toChainId: 8453, // Base
+  toTokenAddress: '0x0000000000000000000000000000000000000000', // ETH
+  toAmount: 1_000_000_000_000_000_000n, // 1 ETH
+});
+
+console.log('Received exactly 1 ETH on Base');
+console.log('Source swaps:', result.result.sourceSwaps);
+```
+
+```typescript Restrict Sources
+// Get exactly 1000 USDC on Polygon, using only Base and Arbitrum
+const result = await sdk.swapWithExactOut({
+  toChainId: 137, // Polygon
+  toTokenAddress: '0x3c499c3f21b113b72d1ce615b5b297a8c7c5a6e8', // USDC
+  toAmount: 1000_000_000n, // 1000 USDC
+  fromSources: [
+    {
+      chainId: 8453, // Base
+      tokenAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    },
+    {
+      chainId: 42161, // Arbitrum
+      tokenAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+    },
+  ],
+});
+```
+
+```typescript With Native Gas
+// Get exactly 100 USDC on Base + native gas for transactions
+const result = await sdk.swapWithExactOut({
+  toChainId: 8453,
+  toTokenAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC
+  toAmount: 100_000_000n, // 100 USDC
+  toNativeAmount: 10_000_000_000_000_000n, // 0.01 ETH for gas
+});
+```
+</CodeGroup>
+
+---
+
+## getSwapSupportedChains
+
+Get list of chains and tokens that support swap operations.
+
+```typescript
+sdk.getSwapSupportedChains(): SupportedChainsResult
+```
+
+### Returns
+
+<ResponseField name="SupportedChainsResult" type="array">
+  Array of supported chains
+  
+  <Expandable title="array item properties">
+    <ResponseField name="id" type="number">
+      Chain ID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Chain name
+    </ResponseField>
+    
+    <ResponseField name="logo" type="string">
+      Chain logo URL
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+```typescript
+const supportedChains = sdk.getSwapSupportedChains();
+
+console.log('Swap supported chains:');
+supportedChains.forEach(chain => {
+  console.log(`- ${chain.name} (${chain.id})`);
+});
+
+// Check if specific chain supports swaps
+const baseSupported = supportedChains.some(c => c.id === 8453);
+console.log('Base supports swaps:', baseSupported);
+```
+
+---
+
+## Swap Hooks
+
+Set up swap intent hook for user approval:
+
+```typescript
+sdk.setOnSwapIntentHook(async ({ intent, allow, deny, refresh }) => {
+  // Display swap details to user
+  console.log('Swap Intent:');
+  console.log('From:', intent.sources);
+  console.log('To:', intent.destination);
+  console.log('Gas:', intent.destination.gas);
+  
+  // User interaction
+  if (userApprovesSwap) {
+    allow();
+  } else {
+    deny(); // Throws USER_DENIED_INTENT error
+  }
+  
+  // Optionally refresh to get updated quote
+  const refreshedIntent = await refresh();
+  console.log('Updated quote:', refreshedIntent);
+});
+```
+
+### Swap Intent Structure
+
+```typescript
+type SwapIntent = {
+  destination: {
+    amount: string; // Output amount
+    chain: { id: number; name: string; logo: string };
+    token: { contractAddress: Hex; decimals: number; symbol: string };
+    gas: {
+      amount: string; // Gas amount
+      token: { contractAddress: Hex; decimals: number; symbol: string };
+    };
+  };
+  sources: Array<{
+    amount: string; // Input amount
+    chain: { id: number; name: string; logo: string };
+    token: { contractAddress: Hex; decimals: number; symbol: string };
+  }>;
+};
+```
+
+---
+
+## Swap Steps
+
+Track swap progress with event callbacks:
+
+```typescript
+import { NEXUS_EVENTS } from '@avail-project/nexus-core';
+
+const result = await sdk.swapWithExactIn(input, {
+  onEvent: (event) => {
+    if (event.name === NEXUS_EVENTS.SWAP_STEP_COMPLETE) {
+      const step = event.args;
+      
+      switch (step.type) {
+        case 'SWAP_START':
+          console.log('Swap started');
+          break;
+          
+        case 'DETERMINING_SWAP':
+          console.log('Calculating optimal swap route...');
+          break;
+          
+        case 'SOURCE_SWAP_HASH':
+          console.log('Source swap TX:', step.explorerURL);
+          break;
+          
+        case 'RFF_ID':
+          console.log('Request for funds ID:', step.data);
+          break;
+          
+        case 'DESTINATION_SWAP_HASH':
+          console.log('Destination swap TX:', step.explorerURL);
+          break;
+          
+        case 'SWAP_COMPLETE':
+          console.log('Swap complete!');
+          break;
+      }
+    }
+  },
+});
+```
+
+### Swap Step Types
+
+| Step Type | Description |
+|-----------|-------------|
+| `SWAP_START` | Swap operation started |
+| `DETERMINING_SWAP` | Calculating optimal swap route |
+| `CREATE_PERMIT_EOA_TO_EPHEMERAL` | Creating permit for ephemeral wallet |
+| `CREATE_PERMIT_FOR_SOURCE_SWAP` | Creating permit for source swap |
+| `SOURCE_SWAP_BATCH_TX` | Executing source chain swaps |
+| `SOURCE_SWAP_HASH` | Source swap transaction hash |
+| `BRIDGE_DEPOSIT` | Bridge deposit for cross-chain swap |
+| `RFF_ID` | Request for funds ID |
+| `DESTINATION_SWAP_BATCH_TX` | Executing destination swaps |
+| `DESTINATION_SWAP_HASH` | Destination swap transaction hash |
+| `SWAP_COMPLETE` | Swap completed successfully |
+| `SWAP_SKIPPED` | Swap skipped (sufficient balance exists) |
+
+---
+
+## Error Handling
+
+```typescript
+import { NexusError, ERROR_CODES } from '@avail-project/nexus-core';
+
+try {
+  const result = await sdk.swapWithExactIn({
+    from: [{ chainId: 10, tokenAddress: '0x...', amount: 1_000_000n }],
+    toChainId: 8453,
+    toTokenAddress: '0x...',
+  });
+} catch (error) {
+  if (error instanceof NexusError) {
+    switch (error.code) {
+      case ERROR_CODES.INSUFFICIENT_BALANCE:
+        console.error('Insufficient balance for swap');
+        break;
+        
+      case ERROR_CODES.USER_DENIED_INTENT:
+        console.log('User cancelled swap');
+        break;
+        
+      case ERROR_CODES.SWAP_FAILED:
+        console.error('Swap failed:', error.message);
+        break;
+        
+      case ERROR_CODES.QUOTE_FAILED:
+        console.error('Failed to get swap quote');
+        break;
+        
+      case ERROR_CODES.RATES_CHANGED_BEYOND_TOLERANCE:
+        console.error('Price moved too much - please try again');
+        break;
+        
+      default:
+        console.error('Swap error:', error.message);
+    }
+  }
+}
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Balance Operations" icon="wallet" href="/api/balance-operations">
+    Get balances for swap
+  </Card>
+  <Card title="Events & Steps" icon="list-check" href="/api/events/swap-steps">
+    Track swap progress
+  </Card>
+</CardGroup>

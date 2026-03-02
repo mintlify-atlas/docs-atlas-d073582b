@@ -1,0 +1,497 @@
+---
+title: 'Smart Optimizations'
+description: 'Automatic optimizations for faster and cheaper transactions'
+icon: 'gauge-high'
+---
+
+## Overview
+
+The Nexus SDK includes **intelligent optimization algorithms** that automatically choose the most efficient execution path for your operations. These optimizations reduce costs, improve speed, and enhance user experience without requiring any additional code.
+
+<Info>
+All optimizations are **automatic** and **transparent**. The SDK analyzes available balances and routes to determine the optimal execution strategy.
+</Info>
+
+## Bridge Skip Optimization
+
+During **bridge-and-execute** operations, the SDK automatically detects when you already have sufficient funds on the destination chain and skips the bridge entirely.
+
+### How It Works
+
+1. **Balance Detection** — Checks token and gas balance on destination chain
+2. **Requirement Analysis** — Calculates exact amount needed for the operation
+3. **Smart Routing** — Decides whether to:
+   - Skip bridge entirely (use existing balance)
+   - Bridge only the shortfall
+   - Use full chain abstraction routing
+4. **Seamless Fallback** — If local funds are insufficient, falls back to bridging
+
+### Example
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(window.ethereum);
+
+// Execute a contract call on Ethereum
+const result = await sdk.bridgeAndExecute({
+  token: 'USDC',
+  amount: 100_000_000n, // 100 USDC
+  toChainId: 1, // Ethereum
+  execute: {
+    to: '0xDeFiProtocol',
+    data: '0x...', // Encoded function call
+    tokenApproval: {
+      token: 'USDC',
+      amount: 100_000_000n,
+      spender: '0xDeFiProtocol',
+    },
+  },
+});
+
+// Check if bridge was skipped
+if (result.bridgeSkipped) {
+  console.log('✅ Used existing balance - no bridge needed!');
+  console.log('Execute TX:', result.executeExplorerUrl);
+} else {
+  console.log('Bridge TX:', result.bridgeExplorerUrl);
+  console.log('Execute TX:', result.executeExplorerUrl);
+}
+```
+
+### Benefits
+
+<CardGroup cols={2}>
+  <Card title="Faster Execution" icon="bolt">
+    Skip bridge waiting time when funds are already on destination
+  </Card>
+  <Card title="Lower Costs" icon="dollar-sign">
+    Save on bridge fees and source chain gas costs
+  </Card>
+  <Card title="Better UX" icon="face-smile">
+    Single transaction instead of multi-step bridge process
+  </Card>
+  <Card title="Automatic" icon="magic">
+    No code changes required - works out of the box
+  </Card>
+</CardGroup>
+
+### Detection Logic
+
+The optimization algorithm checks:
+
+```typescript
+interface OptimizationCheck {
+  // Token balance on destination chain
+  destinationTokenBalance: bigint;
+  
+  // Required token amount for operation
+  requiredTokenAmount: bigint;
+  
+  // Native gas balance on destination
+  destinationGasBalance: bigint;
+  
+  // Required gas for transaction
+  requiredGasAmount: bigint;
+}
+
+// Bridge is skipped if:
+// destinationTokenBalance >= requiredTokenAmount AND
+// destinationGasBalance >= requiredGasAmount
+```
+
+### Partial Bridge Optimization
+
+If you have **some** balance but not enough, the SDK bridges only the shortfall:
+
+```typescript
+// You need 100 USDC on Ethereum
+// You have 40 USDC already on Ethereum
+// SDK automatically bridges only 60 USDC
+
+const result = await sdk.bridgeAndExecute({
+  token: 'USDC',
+  amount: 100_000_000n, // 100 USDC needed
+  toChainId: 1,
+  execute: { /* ... */ },
+});
+
+// Result includes intent showing only 60 USDC was bridged
+console.log('Bridged amount:', result.intent?.destination.amount); // "60"
+```
+
+<Info>
+The SDK accounts for gas requirements and token approvals when calculating the optimal bridge amount.
+</Info>
+
+### Native Token Handling
+
+For native tokens (ETH, MATIC, etc.), the optimization considers both:
+
+- **Value requirement** — ETH needed for the operation
+- **Gas requirement** — ETH needed to pay for gas
+
+```typescript
+// Execute operation with native ETH
+const result = await sdk.bridgeAndExecute({
+  token: 'ETH',
+  amount: 1_000_000_000_000_000_000n, // 1 ETH
+  toChainId: 1,
+  execute: {
+    to: '0xContract',
+    value: 1_000_000_000_000_000_000n, // Send 1 ETH to contract
+    data: '0x...', // Plus execute some function
+  },
+});
+
+// SDK ensures you have:
+// 1. Enough ETH for the value transfer (1 ETH)
+// 2. Enough ETH for gas
+// Bridges the total deficit if needed
+```
+
+## Direct Transfer Optimization
+
+For **transfer operations** (`bridgeAndTransfer`), the SDK automatically chooses between:
+
+- **Direct EVM transfer** — Native blockchain transaction
+- **Chain abstraction routing** — Cross-chain bridge transfer
+
+### How It Works
+
+1. **Local Balance Check** — Verifies token and gas on target chain
+2. **Direct Transfer Attempt** — If sufficient balance exists locally
+3. **CA Routing Fallback** — Uses chain abstraction if needed
+4. **Universal Compatibility** — Works with native tokens and ERC-20s
+
+### Example: Direct Transfer
+
+```typescript
+// Transfer USDC to a recipient on Arbitrum
+const result = await sdk.bridgeAndTransfer({
+  token: 'USDC',
+  amount: 50_000_000n, // 50 USDC
+  toChainId: 42161, // Arbitrum
+  recipient: '0x742d35Cc6634C0532925a3b8D4C9db96c4b4Db45',
+});
+
+console.log('Transfer complete:', result.explorerUrl);
+
+// If you had 50+ USDC on Arbitrum already:
+// - SDK uses direct transfer (single transaction)
+// - Explorer URL is the direct transfer on Arbitrum
+
+// If you didn't have enough:
+// - SDK bridges from other chains
+// - Explorer URL is the destination chain transaction
+```
+
+### Benefits Over Traditional Bridges
+
+| Feature | Direct Transfer | Traditional Bridge |
+|---------|----------------|--------------------|
+| **Speed** | Single transaction | Multi-step process |
+| **Cost** | Single gas fee | Bridge fee + gas |
+| **Complexity** | Simple | Multi-chain coordination |
+| **User Experience** | Instant | Wait for confirmation |
+
+### When Direct Transfer is Used
+
+The SDK uses direct transfer when:
+
+```typescript
+// Conditions for direct transfer:
+// 1. Sufficient token balance on destination chain
+// 2. Sufficient gas balance for transaction
+// 3. Same token (no swap needed)
+
+// ✅ Direct transfer will be used
+await sdk.bridgeAndTransfer({
+  token: 'USDC',
+  amount: 10_000_000n, // You have 10+ USDC on destination
+  toChainId: 137, // Polygon
+  recipient: '0x...', // And you have MATIC for gas
+});
+
+// ❌ Bridge will be used (insufficient balance)
+await sdk.bridgeAndTransfer({
+  token: 'USDC',
+  amount: 100_000_000n, // You only have 10 USDC on destination
+  toChainId: 137,
+  recipient: '0x...',
+});
+```
+
+## Gas Supply Optimization
+
+The SDK automatically supplies gas to destination chains when needed.
+
+### Integrated Gas Supply
+
+```typescript
+// Specify gas to supply on destination
+const result = await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137, // Polygon
+  gas: 1_000_000_000_000_000_000n, // Supply 1 MATIC for gas
+});
+
+// SDK automatically:
+// 1. Bridges 100 USDC
+// 2. Also bridges 1 MATIC for gas
+// 3. Delivers both to destination in single operation
+```
+
+### Automatic Gas Detection
+
+For execute operations, gas requirements are automatically calculated:
+
+```typescript
+const result = await sdk.bridgeAndExecute({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 1,
+  execute: {
+    to: '0xContract',
+    data: '0x...',
+    gas: 500000n, // Specify gas limit
+  },
+});
+
+// SDK automatically:
+// 1. Estimates gas price on Ethereum
+// 2. Calculates ETH needed for gas
+// 3. Bridges additional ETH if you don't have enough
+// 4. Executes the contract call
+```
+
+## Source Chain Selection
+
+The SDK intelligently selects optimal source chains for multi-chain operations.
+
+### Automatic Selection
+
+```typescript
+// SDK automatically selects best source chains
+await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137,
+  // sourceChains not specified - SDK chooses optimal chains
+});
+
+// Optimization considers:
+// - Balance availability across chains
+// - Bridge fees per chain
+// - Network congestion and gas costs
+// - Solver liquidity and rates
+```
+
+### Manual Override
+
+You can override automatic selection when needed:
+
+```typescript
+await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 137,
+  sourceChains: [1, 42161], // Only use Ethereum and Arbitrum
+});
+```
+
+### Multi-Source Aggregation
+
+The SDK can aggregate balances from multiple chains:
+
+```typescript
+// You have:
+// - 60 USDC on Ethereum
+// - 40 USDC on Arbitrum
+// - 30 USDC on Base
+
+// Bridge 100 USDC to Polygon
+await sdk.bridge({
+  token: 'USDC',
+  amount: 100_000_000n, // 100 USDC
+  toChainId: 137,
+});
+
+// SDK automatically:
+// - Selects best combination (e.g., 60 from Ethereum + 40 from Arbitrum)
+// - Submits deposits from both chains
+// - Delivers combined amount to destination
+```
+
+## Allowance Optimization
+
+The SDK optimizes token approvals to minimize transaction count.
+
+### Smart Allowance Strategy
+
+```typescript
+// Set allowance hook
+sdk.setOnAllowanceHook(({ sources, allow, deny }) => {
+  // Option 1: Approve exact minimum (one approval per operation)
+  allow(['min']);
+  
+  // Option 2: Approve unlimited (one approval forever)
+  allow(['max']);
+  
+  // Option 3: Approve specific amount (custom strategy)
+  allow([1000000000n]); // 1000 USDC
+});
+
+// SDK automatically:
+// - Checks existing allowances
+// - Only requests approval if needed
+// - Batches multiple approvals when possible
+```
+
+### Allowance Caching
+
+The SDK caches allowance checks to reduce RPC calls:
+
+```typescript
+// First operation - checks allowance
+await sdk.bridge({ /* ... */ });
+
+// Second operation within same session
+// - Uses cached allowance if no new approval needed
+await sdk.bridge({ /* ... */ });
+```
+
+## Simulation Before Execution
+
+All operations support simulation to preview costs and routes:
+
+```typescript
+// Simulate before executing
+const simulation = await sdk.simulateBridgeAndExecute({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 1,
+  execute: {
+    to: '0xContract',
+    data: '0x...',
+  },
+});
+
+// Check if bridge is needed
+if (simulation.bridgeSimulation === null) {
+  console.log('✅ No bridge needed - sufficient balance on destination');
+}
+
+// Review gas costs
+console.log('Estimated gas:', simulation.executeSimulation.gasUsed);
+console.log('Gas fee:', simulation.executeSimulation.gasFee);
+
+// Proceed with actual execution
+const result = await sdk.bridgeAndExecute({ /* same params */ });
+```
+
+## Performance Metrics
+
+<Info>
+The SDK tracks performance metrics through the analytics system. Enable debug mode to see optimization impact:
+
+```typescript
+const sdk = new NexusSDK({
+  analytics: { debug: true },
+});
+```
+</Info>
+
+### Typical Optimization Impact
+
+| Optimization | Time Saved | Cost Saved | User Impact |
+|--------------|------------|------------|-------------|
+| **Bridge Skip** | ~30-60 sec | 50-70% | Single TX instead of bridge |
+| **Direct Transfer** | ~30-60 sec | 40-60% | Native transfer instead of CA |
+| **Partial Bridge** | ~10-20 sec | 20-40% | Smaller bridge amount |
+| **Allowance Reuse** | ~15 sec | 1 TX fee | Skip approval if allowed |
+
+## Best Practices
+
+### Let the SDK Optimize
+
+```typescript
+// ✅ Good - Let SDK optimize
+await sdk.bridgeAndExecute({
+  token: 'USDC',
+  amount: 100_000_000n,
+  toChainId: 1,
+  execute: { /* ... */ },
+});
+
+// ❌ Avoid - Manual bridge + execute
+await sdk.bridge({ /* ... */ });
+await sdk.execute({ /* ... */ }); // Misses optimization
+```
+
+### Use Simulation for UX
+
+```typescript
+// Show user if bridge is needed
+const sim = await sdk.simulateBridgeAndExecute(params);
+
+if (sim.bridgeSimulation) {
+  showUI('Will bridge from: ' + sim.bridgeSimulation.intent.sources);
+} else {
+  showUI('Using existing balance - no bridge needed ✅');
+}
+```
+
+### Cache Balance Data
+
+```typescript
+// Fetch balances once
+const balances = await sdk.getBalancesForBridge();
+
+// Reuse for multiple operations
+await sdk.bridge({ token: 'USDC', /* ... */ });
+await sdk.bridge({ token: 'USDT', /* ... */ });
+
+// SDK uses cached balance data internally
+```
+
+## Monitoring Optimizations
+
+Track when optimizations are applied:
+
+```typescript
+const result = await sdk.bridgeAndExecute(params, {
+  onEvent: (event) => {
+    if (event.name === 'BRIDGE_SKIPPED') {
+      console.log('🎉 Bridge optimization applied!');
+    }
+  },
+});
+
+// Check result object
+if (result.bridgeSkipped) {
+  analytics.track('optimization_applied', {
+    type: 'bridge_skip',
+    savedAmount: /* calculate savings */,
+  });
+}
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Bridge Operations" icon="bridge" href="/guides/bridge">
+    Learn about bridge operations and parameters
+  </Card>
+  <Card title="Execute Operations" icon="code" href="/guides/execute">
+    Smart contract execution with automatic funding
+  </Card>
+  <Card title="Analytics" icon="chart-line" href="/advanced/analytics">
+    Track optimization impact with analytics
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/guides/error-handling">
+    Handle errors when optimizations aren't possible
+  </Card>
+</CardGroup>
