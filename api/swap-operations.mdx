@@ -496,6 +496,76 @@ try {
 }
 ```
 
+## swapAndExecute
+
+Combine a swap operation with a smart contract execution. This is useful for scenarios where you want to swap tokens and immediately use them in a DeFi protocol.
+
+```typescript
+await sdk.swapAndExecute(
+  input: SwapAndExecuteParams,
+  options?: OnEventParam
+): Promise<SwapAndExecuteResult>
+```
+
+### Parameters
+
+<ParamField path="input" type="SwapAndExecuteParams" required>
+  Swap and execute parameters combining swap input with execution details
+  
+  <Expandable title="properties">
+    <ParamField path="toChainId" type="number" required>
+      Destination chain ID
+    </ParamField>
+    
+    <ParamField path="toTokenAddress" type="Hex" required>
+      Output token contract address
+    </ParamField>
+    
+    <ParamField path="toAmount" type="bigint" required>
+      Exact output amount desired
+    </ParamField>
+    
+    <ParamField path="execute" type="ExecuteParams" required>
+      Smart contract execution parameters (same as `execute()` method)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField path="options" type="OnEventParam" optional>
+  Event callbacks for progress tracking
+</ParamField>
+
+### Example
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+await sdk.initialize(window.ethereum);
+
+// Swap to USDC and deposit into a DeFi protocol
+const result = await sdk.swapAndExecute({
+  toChainId: 8453, // Base
+  toTokenAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
+  toAmount: 100_000_000n, // 100 USDC
+  execute: {
+    to: '0xDeFiProtocolAddress',
+    data: encodedDepositCall,
+    tokenApproval: {
+      token: 'USDC',
+      amount: 100_000_000n,
+      spender: '0xDeFiProtocolAddress',
+    },
+  },
+});
+
+console.log('Execution complete:', result.executeTransactionHash);
+```
+
+<Note>
+The SDK will automatically determine the optimal source chains and amounts needed to achieve the desired output amount for the swap and execution.
+</Note>
+
 ## Related
 
 <CardGroup cols={2}>

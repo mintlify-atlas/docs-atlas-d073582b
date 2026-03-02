@@ -485,3 +485,93 @@ const handleSubmit = async (formData: { amount: string }) => {
 };
 ```
 </CodeGroup>
+
+---
+
+## sdk.convertTokenReadableAmountToBigInt
+
+<Note>Available as an SDK instance method</Note>
+
+Convert a human-readable token amount to bigint using the SDK's chain and token metadata. This is a convenience method that automatically looks up the correct decimals for a token on a specific chain.
+
+```typescript
+sdk.convertTokenReadableAmountToBigInt(
+  amount: string,
+  tokenSymbol: string,
+  chainId: number
+): bigint
+```
+
+### Parameters
+
+<ParamField path="amount" type="string" required>
+  The human-readable decimal value (e.g., "1.5", "100.50")
+</ParamField>
+
+<ParamField path="tokenSymbol" type="string" required>
+  Token symbol - must be one of the supported tokens ('ETH', 'USDC', 'USDT', 'USDM')
+</ParamField>
+
+<ParamField path="chainId" type="number" required>
+  Chain ID where the token will be used
+</ParamField>
+
+### Returns
+
+<ResponseField name="amount" type="bigint">
+  The value in the smallest unit for that specific token on that specific chain
+</ResponseField>
+
+### Example
+
+```typescript
+import { NexusSDK } from '@avail-project/nexus-core';
+
+const sdk = new NexusSDK({ network: 'mainnet' });
+
+// Convert USDC on Ethereum (6 decimals)
+const ethUSDC = sdk.convertTokenReadableAmountToBigInt('100.50', 'USDC', 1);
+// 100500000n
+
+// Convert USDC on BNB Chain (18 decimals)
+const bnbUSDC = sdk.convertTokenReadableAmountToBigInt('100.50', 'USDC', 56);
+// 100500000000000000000n
+
+// Use in bridge operation
+const amount = sdk.convertTokenReadableAmountToBigInt('50', 'USDC', 137);
+await sdk.bridge({
+  token: 'USDC',
+  amount, // Automatically uses correct decimals for Polygon USDC
+  toChainId: 137,
+});
+```
+
+<Warning>
+This method requires the SDK to be initialized with chain metadata. Use the standalone `parseUnits()` function if you need to convert amounts before SDK initialization.
+</Warning>
+
+### Comparison with parseUnits
+
+<Tabs>
+  <Tab title="With SDK Method">
+    ```typescript
+    // SDK method - decimals looked up automatically
+    const amount = sdk.convertTokenReadableAmountToBigInt('100', 'USDC', 1);
+    // Automatically uses 6 decimals for USDC on Ethereum
+    ```
+  </Tab>
+  
+  <Tab title="With parseUnits">
+    ```typescript
+    import { parseUnits } from '@avail-project/nexus-core';
+    
+    // Manual method - must specify decimals
+    const amount = parseUnits('100', 6);
+    // Must know USDC has 6 decimals on Ethereum
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+Use `sdk.convertTokenReadableAmountToBigInt()` when working with supported tokens to avoid decimal mismatch errors across different chains. For example, USDC has 6 decimals on most chains but 18 decimals on BNB Chain.
+</Tip>
