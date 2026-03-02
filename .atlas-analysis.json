@@ -1,0 +1,157 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Avail Nexus SDK",
+  "projectDescription": "A headless TypeScript SDK for cross-chain operations, token bridging, swapping, and unified balance management.",
+  "theme": "aspen",
+  "primaryColor": "#0066FF",
+  "lightColor": "#3D8AFF",
+  "darkColor": "#0052CC",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/initialization",
+              "concepts/intents",
+              "concepts/hooks",
+              "concepts/events"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/bridge",
+              "guides/swap",
+              "guides/execute",
+              "guides/balances",
+              "guides/error-handling"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/analytics",
+              "advanced/optimizations",
+              "advanced/network-config"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core API",
+            "pages": [
+              "api/nexus-sdk",
+              "api/initialization",
+              "api/balance-operations",
+              "api/bridge-operations",
+              "api/swap-operations",
+              "api/execute-operations",
+              "api/intent-management"
+            ]
+          },
+          {
+            "group": "Hooks & Events",
+            "pages": [
+              "api/hooks/intent-hook",
+              "api/hooks/allowance-hook",
+              "api/hooks/swap-intent-hook",
+              "api/events/bridge-steps",
+              "api/events/swap-steps"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types/parameters",
+              "api/types/results",
+              "api/types/intents",
+              "api/types/errors"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/utilities/formatting",
+              "api/utilities/address",
+              "api/utilities/chain-info"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": [
+              "resources/supported-networks",
+              "resources/supported-tokens",
+              "resources/error-codes",
+              "resources/constants"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/basic-bridge",
+              "examples/swap-exact-in",
+              "examples/swap-exact-out",
+              "examples/bridge-and-execute",
+              "examples/progress-ui"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Cross-chain token bridging across 16+ blockchains",
+    "Cross-chain swaps with EXACT_IN and EXACT_OUT modes",
+    "Unified balance aggregation across all supported chains",
+    "Smart contract execution with automatic bridging",
+    "Intent-based architecture with user approval hooks",
+    "Transaction simulation and gas estimation",
+    "Real-time progress events for building UIs",
+    "Complete testnet coverage for development"
+  ],
+  "publicApiSurface": [
+    "NexusSDK.initialize(provider)",
+    "NexusSDK.bridge(params, options)",
+    "NexusSDK.simulateBridge(params)",
+    "NexusSDK.bridgeAndTransfer(params, options)",
+    "NexusSDK.bridgeAndExecute(params, options)",
+    "NexusSDK.swapWithExactIn(input, options)",
+    "NexusSDK.swapWithExactOut(input, options)",
+    "NexusSDK.execute(params, options)",
+    "NexusSDK.simulateExecute(params)",
+    "NexusSDK.getBalancesForBridge()",
+    "NexusSDK.getBalancesForSwap(onlyNativesAndStables?)",
+    "NexusSDK.calculateMaxForBridge(params)",
+    "NexusSDK.getMyIntents(page?)",
+    "NexusSDK.refundIntent(intentID)",
+    "NexusSDK.setOnIntentHook(callback)",
+    "NexusSDK.setOnAllowanceHook(callback)",
+    "NexusSDK.setOnSwapIntentHook(callback)",
+    "formatTokenBalance(amount, decimals, options)",
+    "formatUnits(value, decimals)",
+    "parseUnits(value, decimals)",
+    "isValidAddress(address)",
+    "truncateAddress(address, start?, end?)",
+    "getSupportedChains(network)",
+    "getCoinbaseRates()"
+  ]
+}
